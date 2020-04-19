@@ -95,7 +95,6 @@ class SunRGBDataset(utils.Dataset):
 
         # Add images
         for a in annotations:
-            print(a)
             files = a.split(" ")
             rgb_image = files[0]
             lbl_image = files[2]
@@ -135,7 +134,6 @@ class SunRGBDataset(utils.Dataset):
         # [height, width, instance_count]
         info = self.image_info[image_id]
         lbl_image_path = info["lbl_image_path"]
-        print("\"" + lbl_image_path + "\"")
         lbl_image = cv2.imread(lbl_image_path, cv2.IMREAD_UNCHANGED)
 
         height, width = lbl_image.shape[:2]
@@ -152,10 +150,9 @@ class SunRGBDataset(utils.Dataset):
                 continue
 
             class_contours, _ = cv2.findContours(class_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            print("class" + str(cls))
             for i in range(0, len(class_contours)):
                 contour_mask = np.zeros([height, width], dtype=np.uint8)
-                cv2.drawContours(contour_mask, class_contours, i, cls, cv2.FILLED)
+                cv2.drawContours(contour_mask, class_contours, i, 1, cv2.FILLED)
                 mask_found.append(contour_mask)
                 class_ids.append(cls)
 
