@@ -35,7 +35,7 @@ class SunRGBDConfig(SunRGBConfig):
     MEAN_PIXEL = 4
 
 
-class SunRGBDataset(utils.Dataset):
+class SunRGBDDataset(utils.Dataset):
     """Generates the sun rgbd dataset.
     """
 
