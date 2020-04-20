@@ -1,7 +1,7 @@
 """
 Mask R-CNN
 Configurations and data loading code for the sun rgbd dataset.
-uses rgbd data
+uses depth data only
 @see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
 """
 
@@ -22,7 +22,7 @@ from mrcnn import utils
 from samples.sun.sunrgb import SunRGBConfig
 
 
-class SunRGBDConfig(SunRGBConfig):
+class SunDConfig(SunRGBConfig):
     """Configuration for training on the sun rgbd dataset.
     Derives from the base Config class and overrides values specific
     to the sun rgbd dataset.
@@ -31,34 +31,35 @@ class SunRGBDConfig(SunRGBConfig):
     NAME = "sunrgbd"
 
     # 3 color channels +  1 depth channel
-    IMAGE_CHANNEL_COUNT = 4
-    MEAN_PIXEL = 4
+    IMAGE_CHANNEL_COUNT = 1
+    MEAN_PIXEL = 1
 
 
-class SunRGBDDataset(utils.Dataset):
+class SunDDataset(utils.Dataset):
     """Generates the sun rgbd dataset.
+    uses depth data only
     """
 
-    def load_sun_rgbd(self, dataset_dir, subset):
+    def load_sun_d(self, dataset_dir, subset):
         """Load a subset of the sun rgbd dataset.
-        Uses the rgb and the depth images
+        Only use the depth images
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("sunrgbd", 1, "bed")
-        self.add_class("sunrgbd", 2, "books")
-        self.add_class("sunrgbd", 3, "ceiling")
-        self.add_class("sunrgbd", 4, "chair")
-        self.add_class("sunrgbd", 5, "floor")
-        self.add_class("sunrgbd", 6, "furniture")
-        self.add_class("sunrgbd", 7, "objects")
-        self.add_class("sunrgbd", 8, "picture")
-        self.add_class("sunrgbd", 9, "sofa")
-        self.add_class("sunrgbd", 10, "table")
-        self.add_class("sunrgbd", 11, "tv")
-        self.add_class("sunrgbd", 12, "wall")
-        self.add_class("sunrgbd", 13, "window")
+        self.add_class("sund", 1, "bed")
+        self.add_class("sund", 2, "books")
+        self.add_class("sund", 3, "ceiling")
+        self.add_class("sund", 4, "chair")
+        self.add_class("sund", 5, "floor")
+        self.add_class("sund", 6, "furniture")
+        self.add_class("sund", 7, "objects")
+        self.add_class("sund", 8, "picture")
+        self.add_class("sund", 9, "sofa")
+        self.add_class("sund", 10, "table")
+        self.add_class("sund", 11, "tv")
+        self.add_class("sund", 12, "wall")
+        self.add_class("sund", 13, "window")
 
         # Train or validation dataset?
         assert subset in ["train13", "test13", "split/test13", "split/val13"]
@@ -72,28 +73,24 @@ class SunRGBDDataset(utils.Dataset):
         # Add images
         for a in annotations:
             files = a.split(" ")
-            rgb_image = files[0]
             dpt_image = files[1]
             lbl_image = files[2]
 
-            rgb_image_path = os.path.join(dataset_dir, rgb_image)
             dpt_image_path = os.path.join(dataset_dir, dpt_image)
             lbl_image_path = os.path.join(dataset_dir, lbl_image)
             dpt_image_path = dpt_image_path.strip()
-            rgb_image_path = rgb_image_path.strip()
             lbl_image_path = lbl_image_path.strip()
 
             self.add_image(
                 "sunrgbd",
-                image_id=rgb_image,  # use file name as a unique image id
-                path=rgb_image_path,
-                dpt_image_path=dpt_image_path,
+                image_id=dpt_image_path,  # use file name as a unique image id
+                path=dpt_image_path,
                 lbl_image_path=lbl_image_path)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "sunrgbd":
+        if info["source"] == "sund":
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
@@ -107,7 +104,7 @@ class SunRGBDDataset(utils.Dataset):
         """
         # If not a sun dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "sunrgbd":
+        if image_info["source"] != "sund":
             return super(self.__class__, self).load_mask(image_id)
 
         # Convert polygons to a bitmap mask of shape
@@ -150,18 +147,8 @@ class SunRGBDDataset(utils.Dataset):
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,4] Numpy array.
-        an image consists of 3 color channels and 1 depth channel
+        an image consists of 1 depth channel
         """
         # Load image
-        rgb_image = super().load_image(image_id)
-        dpt_image = skimage.io.imread(self.image_info[image_id]['dpt_image_path'])
-        width = rgb_image.shape[0]
-        height = rgb_image.shape[1]
-        image = np.zeros([width, height, 4], np.uint8)
-
-        image[:, :, 0] = rgb_image[:, :, 0]
-        image[:, :, 1] = rgb_image[:, :, 1]
-        image[:, :, 2] = rgb_image[:, :, 2]
-        image[:, :, 3] = (dpt_image / 65535 * 255).astype(np.uint8)  # normalized conversion from uint16 to uint8
-
+        image = skimage.io.imread(self.image_info[image_id]['path'])
         return image
