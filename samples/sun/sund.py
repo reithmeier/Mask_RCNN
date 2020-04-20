@@ -149,4 +149,4 @@ class SunDDataset(utils.Dataset):
         """
         # Load image
         image = skimage.io.imread(self.image_info[image_id]['path'])
-        return image
+        return (image / 65535 * 255).astype(np.uint8)
