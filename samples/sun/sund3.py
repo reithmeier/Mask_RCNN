@@ -22,44 +22,40 @@ from mrcnn import utils
 from samples.sun.sunrgb import SunRGBConfig
 
 
-class SunDConfig(SunRGBConfig):
+class SunD3Config(SunRGBConfig):
     """Configuration for training on the sun rgbd dataset.
     Derives from the base Config class and overrides values specific
     to the sun rgbd dataset.
     """
     # Give the configuration a recognizable name
-    NAME = "sund"
-
-    # 3 color channels +  1 depth channel
-    IMAGE_CHANNEL_COUNT = 1
-    MEAN_PIXEL = 1
+    NAME = "sund3"
 
 
-class SunDDataset(utils.Dataset):
+class SunD3Dataset(utils.Dataset):
     """Generates the sun rgbd dataset.
     uses depth data only
     """
 
-    def load_sun_d(self, dataset_dir, subset):
+    def load_sun_d3(self, dataset_dir, subset):
         """Load a subset of the sun rgbd dataset.
         Only use the depth images
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("sund", 1, "bed")
-        self.add_class("sund", 2, "books")
-        self.add_class("sund", 3, "ceiling")
-        self.add_class("sund", 4, "chair")
-        self.add_class("sund", 5, "floor")
-        self.add_class("sund", 6, "furniture")
-        self.add_class("sund", 7, "objects")
-        self.add_class("sund", 8, "picture")
-        self.add_class("sund", 9, "sofa")
-        self.add_class("sund", 10, "table")
-        self.add_class("sund", 11, "tv")
-        self.add_class("sund", 12, "wall")
-        self.add_class("sund", 13, "window")
+        self.add_class("sund3", 1, "bed")
+        self.add_class("sund3", 2, "books")
+        self.add_class("sund3", 3, "ceiling")
+        self.add_class("sund3", 4, "chair")
+        self.add_class("sund3", 5, "floor")
+        self.add_class("sund3", 6, "furniture")
+        self.add_class("sund3", 7, "objects")
+        self.add_class("sund3", 8, "picture")
+        self.add_class("sund3", 9, "sofa")
+        self.add_class("sund3", 10, "table")
+        self.add_class("sund3", 11, "tv")
+        self.add_class("sund3", 12, "wall")
+        self.add_class("sund3", 13, "window")
 
         # Train or validation dataset?
         assert subset in ["train13", "test13", "split/test13", "split/val13"]
@@ -82,7 +78,7 @@ class SunDDataset(utils.Dataset):
             lbl_image_path = lbl_image_path.strip()
 
             self.add_image(
-                "sund",
+                "sund3",
                 image_id=dpt_image_path,  # use file name as a unique image id
                 path=dpt_image_path,
                 lbl_image_path=lbl_image_path)
@@ -90,7 +86,7 @@ class SunDDataset(utils.Dataset):
     def image_reference(self, image_id):
         """Return the path of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "sund":
+        if info["source"] == "sund3":
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
@@ -104,7 +100,7 @@ class SunDDataset(utils.Dataset):
         """
         # If not a sun dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "sund":
+        if image_info["source"] != "sund3":
             return super(self.__class__, self).load_mask(image_id)
 
         # Convert polygons to a bitmap mask of shape
@@ -145,10 +141,4 @@ class SunDDataset(utils.Dataset):
         cv2.waitKey(0)
         return mask, np.array(class_ids)
 
-    def load_image(self, image_id):
-        """Load the specified image and return a [H,W,4] Numpy array.
-        an image consists of 1 depth channel
-        """
-        # Load image
-        image = skimage.io.imread(self.image_info[image_id]['path'])
-        return image
+    # use default load_image, since this method converts depth channel to a 3 channel matrix automatically
