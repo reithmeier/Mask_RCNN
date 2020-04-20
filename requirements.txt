@@ -5,9 +5,11 @@ cython
 matplotlib
 scikit-image
 tensorflow==1.15
+
 keras==2.2.3
 opencv-python
 h5py
 imgaug
 IPython[all]
 pillow
+pyrealsense2
