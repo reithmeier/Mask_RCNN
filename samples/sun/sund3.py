@@ -107,7 +107,6 @@ class SunD3Dataset(utils.Dataset):
         # [height, width, instance_count]
         info = self.image_info[image_id]
         lbl_image_path = info["lbl_image_path"]
-        print("\"" + lbl_image_path + "\"")
         lbl_image = cv2.imread(lbl_image_path, cv2.IMREAD_UNCHANGED)
 
         height, width = lbl_image.shape[:2]
@@ -124,7 +123,6 @@ class SunD3Dataset(utils.Dataset):
                 continue
 
             class_contours, _ = cv2.findContours(class_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            print("class" + str(cls))
             for i in range(0, len(class_contours)):
                 contour_mask = np.zeros([height, width], dtype=np.uint8)
                 cv2.drawContours(contour_mask, class_contours, i, cls, cv2.FILLED)
@@ -141,4 +139,16 @@ class SunD3Dataset(utils.Dataset):
         cv2.waitKey(0)
         return mask, np.array(class_ids)
 
-    # use default load_image, since this method converts depth channel to a 3 channel matrix automatically
+    def load_image(self, image_id):
+        """Load the specified image and return a [H,W,3] Numpy array.
+        overrides load_image, since depth image is uint16 and not uint8
+        """
+        # Load image
+        image = skimage.io.imread(self.image_info[image_id]['path'])
+        # If grayscale. Convert to RGB for consistency.
+        if image.ndim != 3:
+            image = skimage.color.gray2rgb((image / 65535 * 255).astype(np.uint8))
+        # If has an alpha channel, remove it for consistency
+        if image.shape[-1] == 4:
+            image = image[..., :3]
+        return image
