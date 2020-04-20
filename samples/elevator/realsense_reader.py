@@ -14,11 +14,22 @@ print("---")
 pipe = rs.pipeline()
 profile = pipe.start()
 try:
-  for i in range(0, 100):
-    frames = pipe.wait_for_frames()
-    for f in frames:
-      print(f.profile)
+    for i in range(0, 100):
+        frames = pipe.wait_for_frames()
+        for f in frames:
+            print(f.profile)
 finally:
     pipe.stop()
 
 print("---")
+
+
+class RealSenseReader:
+    def __init__(self, file):
+        self.file = file
+
+    def read_frame(self):
+        rgb_frame = []
+        dpt_frame = []
+        intrinsics = []
+        return rgb_frame, dpt_frame, intrinsics
