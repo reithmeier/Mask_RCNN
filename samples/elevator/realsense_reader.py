@@ -33,7 +33,7 @@ def write_intrinsics(intrinsics, file):
     f.close()
 
 
-def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
+def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
     """
     reads color and depth frame
     aligns the frames to the color frame
@@ -80,6 +80,7 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
             dpt_file = dpt_dir + "/" + prefix + "_" + str(i).zfill(6) + ".png"
             rgb_itc_file = rgb_itc_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
             dpt_itc_file = dpt_itc_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
+            lbl_file = lbl_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
             cv2.imwrite(rgb_file, rgb_image)
             cv2.imwrite(dpt_file, dpt_image)
             write_intrinsics(rgb_intrinsics, rgb_itc_file)
@@ -87,7 +88,8 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
             index_file.write(strip(rgb_file) + " " +
                              strip(dpt_file) + " " +
                              strip(rgb_itc_file) + " " +
-                             strip(dpt_itc_file) + "\n")
+                             strip(dpt_itc_file) + " " +
+                             strip(lbl_file) + "\n")
 
             time.sleep(.200)  # dont use all frames
             i += 1
@@ -103,6 +105,7 @@ def main():
     dpt_dir = args.directory + "/depth"
     rgb_itc_dir = args.directory + "/rgb_intrinsics"
     dpt_itc_dir = args.directory + "/depth_intrinsics"
+    lbl_dir = args.directory + "/labels"
 
     if not os.path.exists(rgb_dir):
         os.mkdir(rgb_dir)
@@ -112,8 +115,10 @@ def main():
         os.mkdir(rgb_itc_dir)
     if not os.path.exists(dpt_itc_dir):
         os.mkdir(dpt_itc_dir)
+    if not os.path.exists(lbl_dir):
+        os.mkdir(lbl_dir)
 
-    process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir)
+    process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir)
 
 
 if __name__ == "__main__":
