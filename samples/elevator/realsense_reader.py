@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 
 import cv2
 import numpy as np
@@ -48,22 +49,21 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
 
     try:
         config = rs.config()
-        rs.config.enable_device_from_file(config, args.input)
+        rs.config.enable_device_from_file(config, args.input, repeat_playback=False)
         pipeline = rs.pipeline()
         config.enable_stream(rs.stream.depth, rs.format.z16, 30)
         config.enable_stream(rs.stream.color, rs.format.rgb8, 30)
-        cfg = pipeline.start(config)
+        profile = pipeline.start(config)
         align_to = rs.stream.color
         align = rs.align(align_to)
 
-        rgb_profile = cfg.get_stream(rs.stream.color)
-        dpt_profile = cfg.get_stream(rs.stream.depth)
+        rgb_profile = profile.get_stream(rs.stream.color)
+        dpt_profile = profile.get_stream(rs.stream.depth)
         rgb_intrinsics = rgb_profile.as_video_stream_profile().get_intrinsics()
         dpt_intrinsics = dpt_profile.as_video_stream_profile().get_intrinsics()
 
         i = 0
         while True:
-            print("Saving frame:", i)
             frames = pipeline.wait_for_frames()
             aligned_frames = align.process(frames)
 
@@ -73,6 +73,8 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
             bgr_image = np.asanyarray(bgr_frame.get_data())
             rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
             dpt_image = np.asanyarray(dpt_frame.get_data())
+
+            print("Saving frame:", i)
 
             rgb_file = rgb_dir + "/" + prefix + "_" + str(i).zfill(6) + ".jpg"
             dpt_file = dpt_dir + "/" + prefix + "_" + str(i).zfill(6) + ".png"
@@ -86,6 +88,8 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir):
                              strip(dpt_file) + " " +
                              strip(rgb_itc_file) + " " +
                              strip(dpt_itc_file) + "\n")
+
+            time.sleep(.200)  # dont use all frames
             i += 1
     finally:
         index_file.close()
