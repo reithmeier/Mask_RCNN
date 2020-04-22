@@ -6,7 +6,7 @@ import shutil
 import cv2
 import numpy as np
 
-
+"""
 def resize_dpt(path, file):
     img = cv2.imread(args.input + "/" + path + "/" + file, cv2.IMREAD_UNCHANGED)
     # resize
@@ -23,6 +23,30 @@ def resize_dpt(path, file):
     h = args.height if resized.shape[0] > args.height else resized.shape[0]
     cropped[:h, :w] = resized[:h, :w]
     cv2.imwrite(args.output + "/" + path + "/" + file, cropped)
+"""
+
+
+def resize_dpt(path, file):
+    img = cv2.imread(args.input + "/" + path + "/" + file, cv2.IMREAD_UNCHANGED)
+    # resize
+    width = img.shape[1]
+    height = img.shape[0]
+    if width > height:
+        aspect_ratio = float(height) / float(width)
+        new_width = args.width
+        new_height = int(args.height * aspect_ratio)
+    else:
+        aspect_ratio = float(width) / float(height)
+        new_width = int(args.width * aspect_ratio)
+        new_height = args.height
+    resized = cv2.resize(img, (new_width, new_height))
+
+    # crop / buffer
+    cropped = np.zeros(shape=[args.height, args.width], dtype=np.uint16)
+    w = args.width if resized.shape[1] > args.width else resized.shape[1]
+    h = args.height if resized.shape[0] > args.height else resized.shape[0]
+    cropped[:h, :w] = resized[:h, :w]
+    cv2.imwrite(args.output + "/" + path + "/" + file, cropped)
 
 
 def resize_img(path, file):
@@ -30,12 +54,17 @@ def resize_img(path, file):
     # resize
     width = img.shape[1]
     height = img.shape[0]
-    aspect_ratio = float(width) / float(height)
-    new_width = int(args.width * aspect_ratio)
-    new_height = args.height
+    if width > height:
+        aspect_ratio = float(height) / float(width)
+        new_width = args.width
+        new_height = int(args.height * aspect_ratio)
+    else:
+        aspect_ratio = float(width) / float(height)
+        new_width = int(args.width * aspect_ratio)
+        new_height = args.height
     resized = cv2.resize(img, (new_width, new_height))
 
-    # corp
+    # crop / buffer
     cropped = np.zeros(shape=[args.height, args.width, 3], dtype=np.uint8)
     w = args.width if resized.shape[1] > args.width else resized.shape[1]
     h = args.height if resized.shape[0] > args.height else resized.shape[0]
@@ -50,17 +79,19 @@ def resize_lbl(path, file):
             for result in completion["result"]:
                 height = result["original_height"]
                 width = result["original_width"]
-                scale_x = float(args.width) / float(width)
-                scale_y = float(args.height) / float(height)
                 result["original_height"] = args.height
                 result["original_width"] = args.width
                 new_points = []
                 for pair in result["value"]["points"]:
-                    x = pair[0]
-                    y = pair[1]
-                    new_x = x * scale_x
-                    new_y = y * scale_y
-                    new_points.append([new_x, new_y])
+                    y = pair[0]
+                    x = pair[1]
+                    if width > height:
+                        new_y = y
+                        new_x = x * (float(height) / float(width))
+                    else:
+                        new_y = y * (float(width) / float(height))
+                        new_x = x
+                    new_points.append([new_y, new_x])
                 result["value"]["points"] = new_points
         with open(args.output + "/" + path + "/" + file, "w") as out_file:
             json.dump(labels, out_file)

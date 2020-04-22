@@ -144,7 +144,6 @@ class ElevatorRGBDataset(utils.Dataset):
         lbl_full_path = info["lbl_full_path"]
         with open(lbl_full_path) as lbl_file:
             labels = json.load(lbl_file)
-        print(labels)
         results = labels["completions"][0]["result"]
         if len(results) == 0:  # no labels
             return np.zeros([0, 0, 0], dtype=np.bool), np.array([])
@@ -156,13 +155,22 @@ class ElevatorRGBDataset(utils.Dataset):
         mask = np.zeros([height, width, instance_count], np.bool)
         class_ids = np.zeros([instance_count], np.int)
 
-        for i, result in results:
+        i = 0
+        for result in results:
             polygon = result["value"]["points"]
-            label_txt = result["value"]["polygonlabels"]
-            x_values = [p[0] for p in polygon]
-            y_values = [p[1] for p in polygon]
+            label_txt = result["value"]["polygonlabels"][0]
+
+            y_values = [p[0] * width / 100 for p in polygon]
+            x_values = [p[1] * height / 100 for p in polygon]
             rr, cc = skimage.draw.polygon(x_values, y_values)
+            # labels might extend over boundaries, due to preprocessing
+            rr = [height-1 if r > height-1 else r for r in rr]
+            cc = [width-1 if c > width-1 else c for c in cc]
+            rr = [0 if r < 0 else r for r in rr]
+            cc = [0 if c < 0 else c for c in cc]
+
             mask[rr, cc, i] = True
             class_ids[i] = self.class_name_to_id[label_txt]
+            i = i + 1
 
         return mask, class_ids
