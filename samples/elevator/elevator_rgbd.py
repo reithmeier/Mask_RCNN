@@ -1,6 +1,8 @@
 """
 Mask R-CNN
 Configurations and data loading code for the elevator dataset.
+uses rgbd data
+@see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
 """
 
 import json
@@ -15,78 +17,53 @@ ROOT_DIR = os.path.abspath("../../")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn.config import Config
+
 from mrcnn import utils
+from samples.elevator.elevator_rgb import ElevatorRGBConfig
 
 
-class ElevatorRGBConfig(Config):
+class ElevatorRGBDConfig(ElevatorRGBConfig):
     """Configuration for training on the elevator dataset.
     Derives from the base Config class and overrides values specific
     to the elevator dataset.
     """
     # Give the configuration a recognizable name
-    NAME = "elevator_rgb"
+    NAME = "elevator_rgbd"
 
-    # Train on 1 GPU and 8 images per GPU. We can put multiple images on each
-    # GPU because the images are small. Batch size is 8 (GPUs * images/GPU).
-    GPU_COUNT = 1
-    IMAGES_PER_GPU = 1
-
-    # Number of classes (including background)
-    NUM_CLASSES = 1 + 10  # background + 10 classes
-
-    # Use small images for faster training. Set the limits of the small side
-    # the large side, and that determines the image shape.
-    IMAGE_MIN_DIM = 512
-    IMAGE_MAX_DIM = 512
-
-    # smaller anchors, since images are 512x512
-    RPN_ANCHOR_SCALES = (16, 32, 64, 128, 256)
-
-    # Reduce training ROIs per image because the images are small and have
-    # few objects. Aim to allow ROI sampling to pick 33% positive ROIs.
-    # TRAIN_ROIS_PER_IMAGE = 32
-
-    # Use a small epoch since the data is simple
-    STEPS_PER_EPOCH = 100
-
-    # use small validation steps since the epoch is small
-    # VALIDATION_STEPS = 5
-
-    # Skip detections with < 90% confidence
-    # DETECTION_MIN_CONFIDENCE = 0.9
+    # 3 color channels +  1 depth channel
+    IMAGE_CHANNEL_COUNT = 4
+    MEAN_PIXEL = 4
 
 
-class ElevatorRGBDataset(utils.Dataset):
+class ElevatorRGBDDataset(utils.Dataset):
     """Generates the elevator dataset.
-    Only uses the RGB Images
     """
 
     def __init__(self, class_map=None):
         self.class_name_to_id = {}
-        super(ElevatorRGBDataset, self).__init__(class_map)
+        super(ElevatorRGBDDataset, self).__init__(class_map)
 
     def add_class(self, source, class_id, class_name):
         self.class_name_to_id[class_name] = class_id
-        super(ElevatorRGBDataset, self).add_class(source=source, class_id=class_id, class_name=class_name)
+        super(ElevatorRGBDDataset, self).add_class(source=source, class_id=class_id, class_name=class_name)
 
-    def load_elevator_rgb(self, dataset_dir, subset):
+    def load_elevator_rgbd(self, dataset_dir, subset):
         """Load a subset of the elevator dataset.
-        Only use the rgb images
+        Uses the rgb and the depth images
         dataset_dir: Root directory of the dataset.
-        subset: Subset to load: train, val or test
+        subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("elevator_rgb", 1, "human_standing")
-        self.add_class("elevator_rgb", 2, "human_sitting")
-        self.add_class("elevator_rgb", 3, "human_lying")
-        self.add_class("elevator_rgb", 4, "bag")
-        self.add_class("elevator_rgb", 5, "box")
-        self.add_class("elevator_rgb", 6, "crate")
-        self.add_class("elevator_rgb", 7, "plant")
-        self.add_class("elevator_rgb", 8, "chair")
-        self.add_class("elevator_rgb", 9, "object")
-        self.add_class("elevator_rgb", 10, "door")
+        self.add_class("elevator_rgbd", 1, "human_standing")
+        self.add_class("elevator_rgbd", 2, "human_sitting")
+        self.add_class("elevator_rgbd", 3, "human_lying")
+        self.add_class("elevator_rgbd", 4, "bag")
+        self.add_class("elevator_rgbd", 5, "box")
+        self.add_class("elevator_rgbd", 6, "crate")
+        self.add_class("elevator_rgbd", 7, "plant")
+        self.add_class("elevator_rgbd", 8, "chair")
+        self.add_class("elevator_rgbd", 9, "object")
+        self.add_class("elevator_rgbd", 10, "door")
 
         # Train or validation dataset?
         assert subset in ["train", "test", "validation"]
@@ -104,24 +81,27 @@ class ElevatorRGBDataset(utils.Dataset):
             # rgb dpt rgb_intrinsics dpt_intrinsics lbl
 
             rgb_file = files[0]
-            # dpt_file = files[1]  # not used here
+            dpt_file = files[1]
             lbl_file = files[4]
 
             rgb_full_path = os.path.join(dataset_dir, rgb_file)
+            dpt_full_path = os.path.join(dataset_dir, dpt_file)
             lbl_full_path = os.path.join(dataset_dir, lbl_file)
             rgb_full_path = rgb_full_path.strip()
+            dpt_full_path = dpt_full_path.strip()
             lbl_full_path = lbl_full_path.strip()
 
             self.add_image(
-                "elevator_rgb",
+                "elevator_rgbd",
                 image_id=rgb_file,  # use file name as a unique image id
                 path=rgb_full_path,
+                dpt_full_path=dpt_full_path,
                 lbl_full_path=lbl_full_path)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "elevator_rgb":
+        if info["source"] == "elevator_rgbd":
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
@@ -135,7 +115,7 @@ class ElevatorRGBDataset(utils.Dataset):
         """
         # If not a elevator dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "elevator_rgb":
+        if image_info["source"] != "elevator_rgbd":
             return super(self.__class__, self).load_mask(image_id)
 
         # Convert polygons to a bitmap mask of shape
@@ -164,8 +144,8 @@ class ElevatorRGBDataset(utils.Dataset):
             x_values = [p[1] * height / 100 for p in polygon]
             rr, cc = skimage.draw.polygon(x_values, y_values)
             # labels might extend over boundaries, due to preprocessing
-            rr = [height-1 if r > height-1 else r for r in rr]
-            cc = [width-1 if c > width-1 else c for c in cc]
+            rr = [height - 1 if r > height - 1 else r for r in rr]
+            cc = [width - 1 if c > width - 1 else c for c in cc]
             rr = [0 if r < 0 else r for r in rr]
             cc = [0 if c < 0 else c for c in cc]
 
@@ -174,3 +154,21 @@ class ElevatorRGBDataset(utils.Dataset):
             i = i + 1
 
         return mask, class_ids
+
+    def load_image(self, image_id):
+        """Load the specified image and return a [H,W,4] Numpy array.
+        an image consists of 3 color channels and 1 depth channel
+        """
+        # Load image
+        rgb_image = super().load_image(image_id)
+        dpt_image = skimage.io.imread(self.image_info[image_id]['dpt_full_path'])
+        width = rgb_image.shape[0]
+        height = rgb_image.shape[1]
+        image = np.zeros([width, height, 4], np.uint8)
+
+        image[:, :, 0] = rgb_image[:, :, 0]
+        image[:, :, 1] = rgb_image[:, :, 1]
+        image[:, :, 2] = rgb_image[:, :, 2]
+        image[:, :, 3] = (dpt_image / 65535 * 255).astype(np.uint8)  # normalized conversion from uint16 to uint8
+
+        return image
