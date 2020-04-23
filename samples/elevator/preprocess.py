@@ -46,7 +46,11 @@ def resize_dpt(path, file):
     w = args.width if resized.shape[1] > args.width else resized.shape[1]
     h = args.height if resized.shape[0] > args.height else resized.shape[0]
     cropped[:h, :w] = resized[:h, :w]
-    cv2.imwrite(args.output + "/" + path + "/" + file, cropped)
+
+    # normalize
+    normalized = np.zeros(shape=[args.height, args.width], dtype=np.uint16)
+    cv2.normalize(cropped, normalized, np.iinfo(np.uint16).max, 0, cv2.NORM_MINMAX)
+    cv2.imwrite(args.output + "/" + path + "/" + file, normalized)
 
 
 def resize_img(path, file):
