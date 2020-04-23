@@ -33,7 +33,7 @@ This repository contains functionality to process the Sun RGB-D Dataset and the 
 [./samples/sun/train_model_rgbd.ipynb](./samples/sun/train_model_rgbd.ipynb)
 
 ### EDEN Elevator
-1. Aquire the dataset by processing ROS-Bag files with [./samples/elevator/realsense_reader.py](./samples/elevator/realsense_reader.py)
+1. Aquire the dataset by processing ROS-Bag files with [./samples/elevator/realsense_reader.py](samples/elevator/data_generation/realsense_reader.py)
 1. Label the dataset with https://github.com/heartexlabs/label-studio 
     1. `git clone https://github.com/heartexlabs/label-studio.git`
     1. change line 10 in docker-compose.yaml to `command: "label-studio start my_project --init --force --input-path=./my_project/path/to/rgb --input-format=image-dir --label-config='./my_project/path/to/new/config.xml'"`
@@ -42,7 +42,7 @@ This repository contains functionality to process the Sun RGB-D Dataset and the 
     1. run it with docker-compose up -d
     1. label the data
     1. add the labels to the dataset with `python ./samples/elevator/rename_label_files.py -i label_studio_dir/my-project/completions/ -o dataset_dir`
-1. split the data into train, validation, test with [./samples/elevator/split.py](./samples/elevator/split.py)
+1. split the data into train, validation, test with [./samples/elevator/split.py](samples/elevator/data_generation/split.py)
 1. open jupyter notebook with `jupyter notebook`
 1. Inspect the dataset with 
 [./samples/elevator/inspect_data_d3.ipynb](./samples/elevator/inspect_data_d3.ipynb),
