@@ -57,6 +57,6 @@ if __name__ == "__main__":
     parser.add_argument("-o", "--output", type=str, help="Path to save the split files",
                         default=ROOT_DIR + "/datasets/elevator/out/split")
     parser.add_argument("-i", "--input", type=str, help="Input index file",
-                        default=ROOT_DIR + "/datasets/elevator/out/all.txt")
+                        default=ROOT_DIR + "/datasets/elevator/out/trimmed.txt")
     args = parser.parse_args()
     main()

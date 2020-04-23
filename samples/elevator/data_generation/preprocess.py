@@ -128,6 +128,7 @@ def main():
         shutil.copy(args.input + "/" + spt_dir + "/" + filename, args.output + "/" + spt_dir + "/" + filename)
 
     shutil.copy(args.input + "/" + "all.txt", args.output + "/" + "all.txt")
+    shutil.copy(args.input + "/" + "trimmed.txt", args.output + "/" + "trimmed.txt")
 
     print("done")
 
