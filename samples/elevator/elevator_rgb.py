@@ -86,7 +86,7 @@ class ElevatorRGBDataset(utils.Dataset):
         self.add_class("elevator_rgb", 7, "plant")
         self.add_class("elevator_rgb", 8, "chair")
         self.add_class("elevator_rgb", 9, "object")
-        self.add_class("elevator_rgb", 10, "door")
+        self.add_class("elevator_rgb", 10, "human_other")
 
         # Train or validation dataset?
         assert subset in ["train", "test", "validation"]

@@ -6,24 +6,7 @@ import shutil
 import cv2
 import numpy as np
 
-"""
-def resize_dpt(path, file):
-    img = cv2.imread(args.input + "/" + path + "/" + file, cv2.IMREAD_UNCHANGED)
-    # resize
-    width = img.shape[1]
-    height = img.shape[0]
-    aspect_ratio = float(width) / float(height)
-    new_width = int(args.width * aspect_ratio)
-    new_height = args.height
-    resized = cv2.resize(img, (new_width, new_height))
-
-    # corp
-    cropped = np.zeros(shape=[args.height, args.width], dtype=np.uint16)
-    w = args.width if resized.shape[1] > args.width else resized.shape[1]
-    h = args.height if resized.shape[0] > args.height else resized.shape[0]
-    cropped[:h, :w] = resized[:h, :w]
-    cv2.imwrite(args.output + "/" + path + "/" + file, cropped)
-"""
+ROOT_DIR = os.path.abspath("./../../..")
 
 
 def resize_dpt(path, file):
@@ -151,8 +134,10 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--output", type=str, help="Path of the output directory", default="./preprocessed")
-    parser.add_argument("-i", "--input", type=str, help="Path of the input directory", default="./out")
+    parser.add_argument("-o", "--output", type=str, help="Path of the output directory",
+                        default=ROOT_DIR + "/datasets/elevator/preprocessed")
+    parser.add_argument("-i", "--input", type=str, help="Path of the input directory",
+                        default=ROOT_DIR + "/datasets/elevator/out")
     parser.add_argument("-w", "--width", type=int, help="Width to resize to", default=512)
     parser.add_argument("-j", "--height", type=int, help="Height to resize to", default=512)
 

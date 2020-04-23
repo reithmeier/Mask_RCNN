@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 
+ROOT_DIR = os.path.abspath("./../../..")
+
 
 def main():
     if not os.path.exists(args.output):
@@ -19,7 +21,9 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-o", "--output", type=str, help="Path to save the labels", default="./out/labels")
-    parser.add_argument("-i", "--input", type=str, help="Path to load the labels from", default="./in/labels")
+    parser.add_argument("-o", "--output", type=str, help="Path to save the labels",
+                        default=ROOT_DIR + "/datasets/elevator/out/labels")
+    parser.add_argument("-i", "--input", type=str, help="Path to load the labels from",
+                        default=ROOT_DIR +"/datasets/elevator/out/completions")
     args = parser.parse_args()
     main()

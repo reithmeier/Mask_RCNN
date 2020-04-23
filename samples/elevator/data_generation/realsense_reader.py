@@ -6,6 +6,8 @@ import cv2
 import numpy as np
 import pyrealsense2 as rs
 
+ROOT_DIR = os.path.abspath("./../../..")
+
 
 def strip(file):
     """
@@ -44,12 +46,12 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
     :param dpt_itc_dir: directory to save depth intrinsics to
     """
 
-    prefix = args.input.split(".")[0]  # name of file without extension
+    prefix = args.bag_file.split(".")[0]  # name of file without extension
     index_file = open(args.directory + "/" + "all.txt", "a")
 
     try:
         config = rs.config()
-        rs.config.enable_device_from_file(config, args.input, repeat_playback=False)
+        rs.config.enable_device_from_file(config, args.bag_directory + args.bag_file, repeat_playback=False)
         pipeline = rs.pipeline()
         config.enable_stream(rs.stream.depth, rs.format.z16, 30)
         config.enable_stream(rs.stream.color, rs.format.rgb8, 30)
@@ -91,7 +93,7 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
                              strip(dpt_itc_file) + " " +
                              strip(lbl_file) + "\n")
 
-            time.sleep(.200)  # dont use all frames
+            time.sleep(.100)  # dont use all frames
             i += 1
     finally:
         index_file.close()
@@ -123,8 +125,12 @@ def main():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-d", "--directory", type=str, help="Path to save the images", default="./out")
-    parser.add_argument("-i", "--input", type=str, help="Bag file to read", default="20181008_105503.bag")
+    parser.add_argument("-d", "--directory", type=str, help="Path to save the images",
+                        default=ROOT_DIR + "/datasets/elevator/out/")
+    parser.add_argument("-i", "--bag_directory", type=str, help="Bag file directory",
+                        default=ROOT_DIR + "/datasets/elevator/")
+    parser.add_argument("-b", "--bag_file", type=str, help="Bag file to read",
+                        default="20181008_105503.bag")
     args = parser.parse_args()
 
     main()
