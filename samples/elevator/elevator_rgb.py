@@ -57,6 +57,9 @@ class ElevatorRGBConfig(Config):
     # DETECTION_MIN_CONFIDENCE = 0.9
 
 
+
+
+
 class ElevatorRGBDataset(utils.Dataset):
     """Generates the elevator dataset.
     Only uses the RGB Images
@@ -126,6 +129,34 @@ class ElevatorRGBDataset(utils.Dataset):
         else:
             super(self.__class__, self).image_reference(image_id)
 
+    @staticmethod
+    def draw_polygon(polygon, width, height):
+        y_values = [p[0] * width / 100 for p in polygon]
+        x_values = [p[1] * height / 100 for p in polygon]
+        rr, cc = skimage.draw.polygon(x_values, y_values)
+        # labels might extend over boundaries, due to preprocessing
+        rr = [height - 1 if r > height - 1 else r for r in rr]
+        cc = [width - 1 if c > width - 1 else c for c in cc]
+        rr = [0 if r < 0 else r for r in rr]
+        cc = [0 if c < 0 else c for c in cc]
+        return rr, cc
+
+    @staticmethod
+    def find_relation(relations, identifier):
+        for relation in relations:
+            if relation["from_id"] == identifier:
+                return True, relation["to_id"]
+            if relation["to_id"] == identifier:
+                return True, relation["from_id"]
+        return False, ""
+
+    @staticmethod
+    def find_result(results, identifier):
+        for result in results:
+            if result["id"] == identifier:
+                return result["value"]["points"]
+        return []
+
     def load_mask(self, image_id):
         """Generate instance masks for an image.
        Returns:
@@ -144,7 +175,7 @@ class ElevatorRGBDataset(utils.Dataset):
         lbl_full_path = info["lbl_full_path"]
         with open(lbl_full_path) as lbl_file:
             labels = json.load(lbl_file)
-        results = labels["completions"][0]["result"]
+        results = labels["completions"][-1]["result"]  # always get the latest entries
         if len(results) == 0:  # no labels
             return np.zeros([0, 0, 0], dtype=np.bool), np.array([])
 
@@ -155,21 +186,37 @@ class ElevatorRGBDataset(utils.Dataset):
         mask = np.zeros([height, width, instance_count], np.bool)
         class_ids = np.zeros([instance_count], np.int)
 
+        relations = []
+        # relations indicate that two polygons belong to the same object instance in the image
+        # therefore relations need to be found and masks need to be merged
+        for result in results:
+            if result["type"] != "relation":
+                continue
+            # keys: from_id, to_id
+            relations.append(result)
+
+        skip_ids = []  # skip already merged polygons
+
         i = 0
         for result in results:
-            polygon = result["value"]["points"]
-            label_txt = result["value"]["polygonlabels"][0]
+            # skip non-polygons
+            if result["type"] != "polygonlabels":
+                continue
+            if result["id"] in skip_ids:
+                continue
 
-            y_values = [p[0] * width / 100 for p in polygon]
-            x_values = [p[1] * height / 100 for p in polygon]
-            rr, cc = skimage.draw.polygon(x_values, y_values)
-            # labels might extend over boundaries, due to preprocessing
-            rr = [height-1 if r > height-1 else r for r in rr]
-            cc = [width-1 if c > width-1 else c for c in cc]
-            rr = [0 if r < 0 else r for r in rr]
-            cc = [0 if c < 0 else c for c in cc]
+            rr, cc = self.draw_polygon(result["value"]["points"], width, height)
 
             mask[rr, cc, i] = True
+
+            # find relation
+            has_relation, relation_id = self.find_relation(relations, result["id"])
+            if has_relation:
+                rel_rr, rel_cc = self.draw_polygon(self.find_result(results, relation_id), width, height)
+                mask[rel_rr, rel_cc, i] = True
+                skip_ids.append(relation_id)
+
+            label_txt = result["value"]["polygonlabels"][0]
             class_ids[i] = self.class_name_to_id[label_txt]
             i = i + 1
 
