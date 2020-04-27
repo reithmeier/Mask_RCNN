@@ -57,9 +57,6 @@ class ElevatorRGBConfig(Config):
     # DETECTION_MIN_CONFIDENCE = 0.9
 
 
-
-
-
 class ElevatorRGBDataset(utils.Dataset):
     """Generates the elevator dataset.
     Only uses the RGB Images
@@ -142,13 +139,14 @@ class ElevatorRGBDataset(utils.Dataset):
         return rr, cc
 
     @staticmethod
-    def find_relation(relations, identifier):
+    def filter_relations(relations, identifier):
+        found = []
         for relation in relations:
             if relation["from_id"] == identifier:
-                return True, relation["to_id"]
+                found.append(relation["to_id"])
             if relation["to_id"] == identifier:
-                return True, relation["from_id"]
-        return False, ""
+                found.append(relation["from_id"])
+        return found
 
     @staticmethod
     def find_result(results, identifier):
@@ -175,7 +173,7 @@ class ElevatorRGBDataset(utils.Dataset):
         lbl_full_path = info["lbl_full_path"]
         with open(lbl_full_path) as lbl_file:
             labels = json.load(lbl_file)
-        results = labels["completions"][-1]["result"]  # always get the latest entries
+        results = labels["completions"][-1]["result"]  # always get the latest entry
         if len(results) == 0:  # no labels
             return np.zeros([0, 0, 0], dtype=np.bool), np.array([])
 
@@ -210,11 +208,13 @@ class ElevatorRGBDataset(utils.Dataset):
             mask[rr, cc, i] = True
 
             # find relation
-            has_relation, relation_id = self.find_relation(relations, result["id"])
-            if has_relation:
-                rel_rr, rel_cc = self.draw_polygon(self.find_result(results, relation_id), width, height)
+            relations_for_id = self.filter_relations(relations, result["id"])
+            for relation in relations_for_id:
+                rel_rr, rel_cc = self.draw_polygon(self.find_result(results, relation), width, height)
+                # merge with related polygon
                 mask[rel_rr, rel_cc, i] = True
-                skip_ids.append(relation_id)
+                # don't use merged polygon again
+                skip_ids.append(relation)
 
             label_txt = result["value"]["polygonlabels"][0]
             class_ids[i] = self.class_name_to_id[label_txt]
