@@ -1,7 +1,6 @@
 import argparse
 import json
 import os
-import shutil
 
 import cv2
 import numpy as np
@@ -9,8 +8,8 @@ import numpy as np
 ROOT_DIR = os.path.abspath("./../../..")
 
 
-def resize_dpt(path, file):
-    img = cv2.imread(args.input + "/" + path + "/" + file, cv2.IMREAD_UNCHANGED)
+def resize_dpt(file):
+    img = cv2.imread(args.input + file[1:], cv2.IMREAD_UNCHANGED)
     # resize
     width = img.shape[1]
     height = img.shape[0]
@@ -33,11 +32,11 @@ def resize_dpt(path, file):
     # normalize
     normalized = np.zeros(shape=[args.height, args.width], dtype=np.uint16)
     cv2.normalize(cropped, normalized, np.iinfo(np.uint16).max, 0, cv2.NORM_MINMAX)
-    cv2.imwrite(args.output + "/" + path + "/" + file, normalized)
+    cv2.imwrite(args.output + file[1:], normalized)
 
 
-def resize_img(path, file):
-    img = cv2.imread(args.input + "/" + path + "/" + file, cv2.IMREAD_UNCHANGED)
+def resize_img(file):
+    img = cv2.imread(args.input + file[1:], cv2.IMREAD_UNCHANGED)
     # resize
     width = img.shape[1]
     height = img.shape[0]
@@ -56,11 +55,11 @@ def resize_img(path, file):
     w = args.width if resized.shape[1] > args.width else resized.shape[1]
     h = args.height if resized.shape[0] > args.height else resized.shape[0]
     cropped[:h, :w] = resized[:h, :w]
-    cv2.imwrite(args.output + "/" + path + "/" + file, cropped)
+    cv2.imwrite(args.output + file[1:], cropped)
 
 
-def resize_lbl(path, file):
-    with open(args.input + "/" + path + "/" + file) as in_file:
+def resize_lbl(file):
+    with open(args.input + file[1:]) as in_file:
         labels = json.load(in_file)
         for completion in labels["completions"]:
             for result in completion["result"]:
@@ -80,8 +79,29 @@ def resize_lbl(path, file):
                         new_x = x
                     new_points.append([new_y, new_x])
                 result["value"]["points"] = new_points
-        with open(args.output + "/" + path + "/" + file, "w") as out_file:
+        with open(args.output + file[1:], "w") as out_file:
             json.dump(labels, out_file)
+
+
+def contains_labels(lbl_filename):
+    with open(lbl_filename) as lbl_file:
+        data = json.load(lbl_file)
+        annotations = data['completions'][-1]["result"]
+        return len(annotations) > 0
+
+
+def requirements_met(line):
+    rgb_filename = line.split(" ")[0].strip()
+    dpt_filename = line.split(" ")[1].strip()
+    rgb_itc_filename = line.split(" ")[2].strip()
+    dpt_itc_filename = line.split(" ")[3].strip()
+    lbl_filename = line.split(" ")[4].strip()
+    return os.path.exists(args.input + rgb_filename) and os.path.isfile(args.input + rgb_filename) and \
+           os.path.exists(args.input + dpt_filename) and os.path.isfile(args.input + dpt_filename) and \
+           os.path.exists(args.input + rgb_itc_filename) and os.path.isfile(args.input + rgb_itc_filename) and \
+           os.path.exists(args.input + dpt_itc_filename) and os.path.isfile(args.input + dpt_itc_filename) and \
+           os.path.exists(args.input + lbl_filename) and os.path.isfile(args.input + lbl_filename) and \
+           contains_labels(args.input + lbl_filename)
 
 
 def mkdir(directory):
@@ -107,29 +127,19 @@ def main():
     # mkdir(args.output + "/" + rgb_itc_dir)
     mkdir(args.output + "/" + spt_dir)
 
-    # dpt images
-    print("preprocess depth images...")
-    for filename in os.listdir(args.input + "/" + dpt_dir):
-        resize_dpt(dpt_dir, filename)
-
-    # rgb images
-    print("preprocess rgb images...")
-    for filename in os.listdir(args.input + "/" + rgb_dir):
-        resize_img(rgb_dir, filename)
-
-    # labels
-    print("preprocess labels...")
-    for filename in os.listdir(args.input + "/" + lbl_dir):
-        resize_lbl(lbl_dir, filename)
-
-    # index
-    print("preprocess index files...")
-    for filename in os.listdir(args.input + "/" + spt_dir):
-        shutil.copy(args.input + "/" + spt_dir + "/" + filename, args.output + "/" + spt_dir + "/" + filename)
-
-    shutil.copy(args.input + "/" + "all.txt", args.output + "/" + "all.txt")
-    shutil.copy(args.input + "/" + "trimmed.txt", args.output + "/" + "trimmed.txt")
-
+    with open(args.input + "/" + "all.txt") as in_file:
+        with open(args.output + "/" + "all.txt", "w") as out_file:
+            for line in in_file:
+                if requirements_met(line):
+                    out_file.write(line)
+                    rgb_filename = line.split(" ")[0].strip()
+                    dpt_filename = line.split(" ")[1].strip()
+                    rgb_itc_filename = line.split(" ")[2].strip()
+                    dpt_itc_filename = line.split(" ")[3].strip()
+                    lbl_filename = line.split(" ")[4].strip()
+                    resize_img(rgb_filename)
+                    resize_dpt(dpt_filename)
+                    resize_lbl(lbl_filename)
     print("done")
 
 

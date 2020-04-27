@@ -35,11 +35,13 @@ def write_intrinsics(intrinsics, file):
     f.close()
 
 
-def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
+def process_frames(rgb_dir, dpt_dir, dpt_raw_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
     """
     reads color and depth frame
     aligns the frames to the color frame
     writes depth frame, color frame and intrinsics to files
+    :param lbl_dir: directory to save label file to
+    :param dpt_raw_dir: directory to save unaligned depth frames to
     :param rgb_dir: directory to save color frames to
     :param dpt_dir: directory to save depth frames to
     :param rgb_itc_dir: directory to save color intrinsics to
@@ -67,6 +69,7 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
         i = 0
         while True:
             frames = pipeline.wait_for_frames()
+            dpt_raw_frame = frames.get_depth_frame()
             aligned_frames = align.process(frames)
 
             bgr_frame = aligned_frames.get_color_frame()
@@ -75,25 +78,30 @@ def process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir):
             bgr_image = np.asanyarray(bgr_frame.get_data())
             rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
             dpt_image = np.asanyarray(dpt_frame.get_data())
+            dpt_raw_image = np.asanyarray(dpt_raw_frame.get_data())
 
             print("Saving frame:", i)
 
             rgb_file = rgb_dir + "/" + prefix + "_" + str(i).zfill(6) + ".jpg"
             dpt_file = dpt_dir + "/" + prefix + "_" + str(i).zfill(6) + ".png"
+            dpt_raw_file = dpt_raw_dir + "/" + prefix + "_" + str(i).zfill(6) + ".png"
             rgb_itc_file = rgb_itc_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
             dpt_itc_file = dpt_itc_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
             lbl_file = lbl_dir + "/" + prefix + "_" + str(i).zfill(6) + ".json"
             cv2.imwrite(rgb_file, rgb_image)
             cv2.imwrite(dpt_file, dpt_image)
+            cv2.imwrite(dpt_raw_file, dpt_raw_image)
+
             write_intrinsics(rgb_intrinsics, rgb_itc_file)
             write_intrinsics(dpt_intrinsics, dpt_itc_file)
             index_file.write(strip(rgb_file) + " " +
                              strip(dpt_file) + " " +
                              strip(rgb_itc_file) + " " +
                              strip(dpt_itc_file) + " " +
-                             strip(lbl_file) + "\n")
+                             strip(lbl_file) + " " +
+                             strip(dpt_raw_file) + "\n")
 
-            time.sleep(.100)  # dont use all frames
+            time.sleep(1.000)  # dont use all frames
             i += 1
     finally:
         index_file.close()
@@ -105,12 +113,15 @@ def main():
         os.mkdir(args.directory)
     rgb_dir = args.directory + "/rgb"
     dpt_dir = args.directory + "/depth"
+    dpt_raw_dir = args.directory + "/depth_raw"
     rgb_itc_dir = args.directory + "/rgb_intrinsics"
     dpt_itc_dir = args.directory + "/depth_intrinsics"
     lbl_dir = args.directory + "/labels"
 
     if not os.path.exists(rgb_dir):
         os.mkdir(rgb_dir)
+    if not os.path.exists(dpt_raw_dir):
+        os.mkdir(dpt_raw_dir)
     if not os.path.exists(dpt_dir):
         os.mkdir(dpt_dir)
     if not os.path.exists(rgb_itc_dir):
@@ -120,17 +131,17 @@ def main():
     if not os.path.exists(lbl_dir):
         os.mkdir(lbl_dir)
 
-    process_frames(rgb_dir, dpt_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir)
+    process_frames(rgb_dir, dpt_dir, dpt_raw_dir, rgb_itc_dir, dpt_itc_dir, lbl_dir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--directory", type=str, help="Path to save the images",
-                        default=ROOT_DIR + "/datasets/elevator/out/")
+                        default=ROOT_DIR + "/datasets/elevator/20190515_201521/out/")
     parser.add_argument("-i", "--bag_directory", type=str, help="Bag file directory",
-                        default=ROOT_DIR + "/datasets/elevator/")
+                        default=ROOT_DIR + "/datasets/elevator/20190515_201521/")
     parser.add_argument("-b", "--bag_file", type=str, help="Bag file to read",
-                        default="20181008_105503.bag")
+                        default="20190515_201521.bag")
     args = parser.parse_args()
 
     main()
