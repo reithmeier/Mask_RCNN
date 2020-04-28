@@ -12,13 +12,14 @@ def main():
         if filename.endswith(".json"):
             with open(args.input + "/" + filename) as in_file:
                 data = json.load(in_file)
-                annotations = data['completions'][0]["result"]
+                annotations = data['completions'][-1]["result"]
                 for ann in annotations:
-                    label = ann["value"]["polygonlabels"][0]
-                    if label in class_cnt:
-                        class_cnt[label] = class_cnt[label] + 1
-                    else:
-                        class_cnt[label] = 1
+                    if ann["type"] == "polygonlabels":
+                        label = ann["value"]["polygonlabels"][0]
+                        if label in class_cnt:
+                            class_cnt[label] = class_cnt[label] + 1
+                        else:
+                            class_cnt[label] = 1
                 label_cnt = len(annotations)
                 if label_cnt in labels_per_file:
                     labels_per_file[label_cnt] = labels_per_file[label_cnt] + 1
@@ -37,6 +38,6 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, help="Path of the input directory",
-                        default=ROOT_DIR + "/datasets/elevator/preprocessed/labels/")
+                        default=ROOT_DIR + "/datasets/elevator/20181008_112926/out/labels/")
     args = parser.parse_args()
     main()

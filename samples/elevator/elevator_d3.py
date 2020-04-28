@@ -5,12 +5,13 @@ uses depth data only
 @see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
 """
 
-import json
 import os
 import sys
 
 import numpy as np
 import skimage.draw
+
+from . import util
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -112,42 +113,8 @@ class ElevatorD3Dataset(utils.Dataset):
         if image_info["source"] != "elevator_d3":
             return super(self.__class__, self).load_mask(image_id)
 
-        # Convert polygons to a bitmap mask of shape
-        # [height, width, instance_count]
-        info = self.image_info[image_id]
-        lbl_full_path = info["lbl_full_path"]
-        with open(lbl_full_path) as lbl_file:
-            labels = json.load(lbl_file)
-        results = labels["completions"][0]["result"]
-        if len(results) == 0:  # no labels
-            return np.zeros([0, 0, 0], dtype=np.bool), np.array([])
-
-        height = results[0]["original_height"]
-        width = results[0]["original_width"]
-        instance_count = len(results)
-
-        mask = np.zeros([height, width, instance_count], np.bool)
-        class_ids = np.zeros([instance_count], np.int)
-
-        i = 0
-        for result in results:
-            polygon = result["value"]["points"]
-            label_txt = result["value"]["polygonlabels"][0]
-
-            y_values = [p[0] * width / 100 for p in polygon]
-            x_values = [p[1] * height / 100 for p in polygon]
-            rr, cc = skimage.draw.polygon(x_values, y_values)
-            # labels might extend over boundaries, due to preprocessing
-            rr = [height - 1 if r > height - 1 else r for r in rr]
-            cc = [width - 1 if c > width - 1 else c for c in cc]
-            rr = [0 if r < 0 else r for r in rr]
-            cc = [0 if c < 0 else c for c in cc]
-
-            mask[rr, cc, i] = True
-            class_ids[i] = self.class_name_to_id[label_txt]
-            i = i + 1
-
-        return mask, class_ids
+        return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
+                                class_name_to_id=self.class_name_to_id)
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,3] Numpy array.
