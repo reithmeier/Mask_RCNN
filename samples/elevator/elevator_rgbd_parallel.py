@@ -1,7 +1,8 @@
 """
 Mask R-CNN
 Configurations and data loading code for the elevator dataset.
-uses depth data only
+uses rgbd data
+backbone of the Mask R-CNN has 2 parallel branches, 1 for RGB data and 1 for D data
 @see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
 """
 
@@ -23,45 +24,50 @@ from mrcnn import utils
 from samples.elevator.elevator_rgb import ElevatorRGBConfig
 
 
-class ElevatorD3Config(ElevatorRGBConfig):
+class ElevatorRGBDParallelConfig(ElevatorRGBConfig):
     """Configuration for training on the elevator dataset.
     Derives from the base Config class and overrides values specific
     to the elevator dataset.
     """
     # Give the configuration a recognizable name
-    NAME = "elevator_d3"
+    NAME = "elevator_rgbd_parallel"
+
+    # 3 color channels +  1 depth channel
+    IMAGE_CHANNEL_COUNT = 4
+    MEAN_PIXEL = 4
+
+    PARALLEL_BACKBONE = True
 
 
-class ElevatorD3Dataset(utils.Dataset):
+class ElevatorRGBDParallelDataset(utils.Dataset):
     """Generates the elevator dataset.
-    uses depth data only
     """
 
     def __init__(self, class_map=None):
         self.class_name_to_id = {}
-        super(ElevatorD3Dataset, self).__init__(class_map)
+        super(ElevatorRGBDParallelDataset, self).__init__(class_map)
 
     def add_class(self, source, class_id, class_name):
         self.class_name_to_id[class_name] = class_id
-        super(ElevatorD3Dataset, self).add_class(source=source, class_id=class_id, class_name=class_name)
+        super(ElevatorRGBDParallelDataset, self).add_class(source=source, class_id=class_id, class_name=class_name)
 
-    def load_elevator_d3(self, dataset_dir, subset):
+    def load_elevator_rgbd_parallel(self, dataset_dir, subset):
         """Load a subset of the elevator dataset.
-        Only use the depth images
+        Uses the rgb and the depth images
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
         # Add classes. We have only one class to add.
-        self.add_class("elevator_d3", 1, "human_standing")
-        self.add_class("elevator_d3", 2, "human_sitting")
-        self.add_class("elevator_d3", 3, "human_lying")
-        self.add_class("elevator_d3", 4, "bag")
-        self.add_class("elevator_d3", 5, "box")
-        self.add_class("elevator_d3", 6, "crate")
-        self.add_class("elevator_d3", 7, "plant")
-        self.add_class("elevator_d3", 8, "chair")
-        self.add_class("elevator_d3", 9, "object")
-        self.add_class("elevator_d3", 10, "human_other")
+        self.add_class("elevator_rgbd_parallel", 1, "human_standing")
+        self.add_class("elevator_rgbd_parallel", 2, "human_sitting")
+        self.add_class("elevator_rgbd_parallel", 3, "human_lying")
+        self.add_class("elevator_rgbd_parallel", 4, "bag")
+        self.add_class("elevator_rgbd_parallel", 5, "box")
+        self.add_class("elevator_rgbd_parallel", 6, "crate")
+        self.add_class("elevator_rgbd_parallel", 7, "plant")
+        self.add_class("elevator_rgbd_parallel", 8, "chair")
+        self.add_class("elevator_rgbd_parallel", 9, "object")
+        self.add_class("elevator_rgbd_parallel", 10, "human_other")
 
         # Train or validation dataset?
         assert subset in ["train", "test", "validation"]
@@ -78,25 +84,28 @@ class ElevatorD3Dataset(utils.Dataset):
             # file structure:
             # rgb dpt rgb_intrinsics dpt_intrinsics lbl
 
-            # rgb_file = files[0] # not used here
+            rgb_file = files[0]
             dpt_file = files[1]
             lbl_file = files[4]
 
+            rgb_full_path = os.path.join(dataset_dir, rgb_file)
             dpt_full_path = os.path.join(dataset_dir, dpt_file)
             lbl_full_path = os.path.join(dataset_dir, lbl_file)
+            rgb_full_path = rgb_full_path.strip()
             dpt_full_path = dpt_full_path.strip()
             lbl_full_path = lbl_full_path.strip()
 
             self.add_image(
-                "elevator_d3",
-                image_id=dpt_file,  # use file name as a unique image id
-                path=dpt_full_path,
+                "elevator_rgbd_parallel",
+                image_id=rgb_file,  # use file name as a unique image id
+                path=rgb_full_path,
+                dpt_full_path=dpt_full_path,
                 lbl_full_path=lbl_full_path)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
         info = self.image_info[image_id]
-        if info["source"] == "elevator_d3":
+        if info["source"] == "elevator_rgbd_parallel":
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
@@ -110,22 +119,26 @@ class ElevatorD3Dataset(utils.Dataset):
         """
         # If not a elevator dataset image, delegate to parent class.
         image_info = self.image_info[image_id]
-        if image_info["source"] != "elevator_d3":
+        if image_info["source"] != "elevator_rgbd_parallel":
             return super(self.__class__, self).load_mask(image_id)
 
         return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
                                 class_name_to_id=self.class_name_to_id)
 
     def load_image(self, image_id):
-        """Load the specified image and return a [H,W,3] Numpy array.
-        overrides load_image, since depth image is uint16 and not uint8
+        """Load the specified image and return a [H,W,4] Numpy array.
+        an image consists of 3 color channels and 1 depth channel
         """
         # Load image
-        image = skimage.io.imread(self.image_info[image_id]['path'])
-        # If grayscale. Convert to RGB for consistency.
-        if image.ndim != 3:
-            image = skimage.color.gray2rgb((image / 65535 * 255).astype(np.uint8))
-        # If has an alpha channel, remove it for consistency
-        if image.shape[-1] == 4:
-            image = image[..., :3]
+        rgb_image = super().load_image(image_id)
+        dpt_image = skimage.io.imread(self.image_info[image_id]['dpt_full_path'])
+        width = rgb_image.shape[0]
+        height = rgb_image.shape[1]
+        image = np.zeros([width, height, 4], np.uint8)
+
+        image[:, :, 0] = rgb_image[:, :, 0]
+        image[:, :, 1] = rgb_image[:, :, 1]
+        image[:, :, 2] = rgb_image[:, :, 2]
+        image[:, :, 3] = (dpt_image / 65535 * 255).astype(np.uint8)  # normalized conversion from uint16 to uint8
+
         return image

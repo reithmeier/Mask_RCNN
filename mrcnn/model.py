@@ -95,7 +95,7 @@ def compute_backbone_shapes(config, image_shape):
 # https://github.com/fchollet/deep-learning-models/blob/master/resnet50.py
 
 def identity_block(input_tensor, kernel_size, filters, stage, block,
-                   use_bias=True, train_bn=True):
+                   use_bias=True, train_bn=True, postfix=""):
     """The identity_block is the block that has no conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -110,27 +110,27 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
-    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a',
+    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a' + postfix,
                   use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
+    x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
+                  name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
+    x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c',
+    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c' + postfix,
                   use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
+    x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     x = KL.Add()([x, input_tensor])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
     return x
 
 
 def conv_block(input_tensor, kernel_size, filters, stage, block,
-               strides=(2, 2), use_bias=True, train_bn=True):
+               strides=(2, 2), use_bias=True, train_bn=True, postfix=""):
     """conv_block is the block that has a conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -148,25 +148,25 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     bn_name_base = 'bn' + str(stage) + block + '_branch'
 
     x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
-                  name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
+                  name=conv_name_base + '2a' + postfix, use_bias=use_bias)(input_tensor)
+    x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
+                  name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
+    x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base +
-                                           '2c', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
+                                           '2c' + postfix, use_bias=use_bias)(x)
+    x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
-                         name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
-    shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
+                         name=conv_name_base + '1' + postfix, use_bias=use_bias)(input_tensor)
+    shortcut = BatchNorm(name=bn_name_base + '1' + postfix)(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
     return x
 
 
@@ -177,15 +177,35 @@ def fusion(a, b):
     :param b: branch b to fuse
     :return: relu(a+b)
     """
-    return KL.Activation('relu')(a + b)
+    return KL.Activation('relu')(KL.Add()([a, b]))
 
 
 def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True, parallel=False):
+    """
+    Build a ResNet graph.
     if parallel:
-        C1_RGB, C2_RGB, C3_RGB, C4_RGB, C5_RGB = resnet_graph(input_image=input_image[:3], architecture=architecture,
-                                                              stage5=stage5, train_bn=train_bn)
-        C1_D, C2_D, C3_D, C4_D, C5_D = resnet_graph(input_image=input_image[-1], architecture=architecture,
-                                                    stage5=stage5, train_bn=train_bn)
+    * there will be a resnet for rgb input image and a resnet for depth input image
+    * these resnets will be fused similar to fusenet
+    * a input shape [?, ?, ?, 4] is necessary
+    :param input_image: 
+    :param architecture: Can be resnet50 or resnet101
+    :param stage5: Boolean. If False, stage5 of the network is not created
+    :param train_bn: Boolean. Train or freeze Batch Norm layers
+    :param parallel: Boolean. If True parallel version is created
+    :return: ResNet graph
+    """
+    if parallel:
+        assert input_image.dims == 4 and input_image.shape[3] == 4  # assert RGB-D input
+        input_image_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
+        input_image_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
+
+        C1_RGB, C2_RGB, C3_RGB, C4_RGB, C5_RGB = resnet_graph(input_image=input_image_rgb,
+                                                              architecture=architecture,
+                                                              stage5=stage5, train_bn=train_bn, postfix="_rgb")
+
+        C1_D, C2_D, C3_D, C4_D, C5_D = resnet_graph(input_image=input_image_dpt, architecture=architecture,
+                                                    stage5=stage5, train_bn=train_bn, postfix="_dpt")
+
         return fusion(C1_RGB, C1_D), \
                fusion(C2_RGB, C2_D), \
                fusion(C3_RGB, C3_D), \
@@ -196,7 +216,7 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
         return resnet_graph(input_image=input_image, architecture=architecture, stage5=stage5, train_bn=train_bn)
 
 
-def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
+def resnet_graph(input_image, architecture, stage5=False, train_bn=True, postfix=""):
     """Build a ResNet graph.
         architecture: Can be resnet50 or resnet101
         stage5: Boolean. If False, stage5 of the network is not created
@@ -205,30 +225,30 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
     assert architecture in ["resnet50", "resnet101"]
     # Stage 1
     x = KL.ZeroPadding2D((3, 3))(input_image)
-    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=True)(x)
-    x = BatchNorm(name='bn_conv1')(x, training=train_bn)
+    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1' + postfix, use_bias=True)(x)
+    x = BatchNorm(name='bn_conv1' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
     C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
     # Stage 2
-    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn)
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn)
-    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn)
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix)
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix)
     # Stage 3
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn)
-    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn)
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix)
     # Stage 4
-    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn)
+    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix)
     block_count = {"resnet50": 5, "resnet101": 22}[architecture]
     for i in range(block_count):
-        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn)
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix)
     C4 = x
     # Stage 5
     if stage5:
-        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn)
-        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn)
-        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn)
+        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix)
+        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix)
+        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix)
     else:
         C5 = None
     return [C1, C2, C3, C4, C5]
@@ -1929,6 +1949,7 @@ class MaskRCNN():
             _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
                                                       stage5=True, train_bn=config.TRAIN_BN,
                                                       parallel=config.PARALLEL_BACKBONE)
+
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
         P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
