@@ -63,6 +63,8 @@ def resize_lbl(file):
         labels = json.load(in_file)
         for completion in labels["completions"]:
             for result in completion["result"]:
+                if result["type"] != "polygonlabels":
+                    continue
                 height = result["original_height"]
                 width = result["original_width"]
                 result["original_height"] = args.height
@@ -126,11 +128,12 @@ def main():
     mkdir(args.output + "/" + rgb_dir)
     # mkdir(args.output + "/" + rgb_itc_dir)
     mkdir(args.output + "/" + spt_dir)
-
+    i = 0
     with open(args.input + "/" + "all.txt") as in_file:
         with open(args.output + "/" + "all.txt", "w") as out_file:
             for line in in_file:
                 if requirements_met(line):
+                    print(i)
                     out_file.write(line)
                     rgb_filename = line.split(" ")[0].strip()
                     dpt_filename = line.split(" ")[1].strip()
@@ -140,15 +143,18 @@ def main():
                     resize_img(rgb_filename)
                     resize_dpt(dpt_filename)
                     resize_lbl(lbl_filename)
+                else:
+                    print("skip", i)
+                i = i + 1
     print("done")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output", type=str, help="Path of the output directory",
-                        default=ROOT_DIR + "/datasets/elevator/preprocessed")
+                        default=ROOT_DIR + "/datasets/elevator/N_18-3_2-0_2/preprocessed")
     parser.add_argument("-i", "--input", type=str, help="Path of the input directory",
-                        default=ROOT_DIR + "/datasets/elevator/out")
+                        default=ROOT_DIR + "/datasets/elevator/N_18-3_2-0_2/out")
     parser.add_argument("-w", "--width", type=int, help="Width to resize to", default=512)
     parser.add_argument("-j", "--height", type=int, help="Height to resize to", default=512)
 
