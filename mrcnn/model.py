@@ -195,7 +195,7 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
     :return: ResNet graph
     """
     if parallel:
-        assert input_image.dims == 4 and input_image.shape[3] == 4  # assert RGB-D input
+        # assert input_image.dims == 4 and input_image.shape[3] == 4  # assert RGB-D input
         input_image_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
         input_image_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
 
