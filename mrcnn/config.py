@@ -210,7 +210,8 @@ class Config(object):
     # Gradient norm clipping
     GRADIENT_CLIP_NORM = 5.0
 
-    # backbone has 2 parallel branches, 1 for rgb image and 1 for depth image
+    # if true, backbone has 2 parallel branches, 1 for rgb image and 1 for depth image
+    # otherwise the default backbone is used
     PARALLEL_BACKBONE = False
 
     def __init__(self):

@@ -3,10 +3,18 @@ Mask R-CNN
 Configurations and data loading code for the elevator dataset.
 """
 
+import argparse
+import copy
 import os
+import random
 import sys
 
-from . import util
+import imgaug as ia
+import imgaug.augmenters as iaa
+import numpy as np
+import util
+
+from mrcnn.model import MaskRCNN
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -15,6 +23,9 @@ ROOT_DIR = os.path.abspath("../../")
 sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import utils
+import mrcnn.model as modellib
+from mrcnn import visualize
+from mrcnn.model import log
 
 
 class ElevatorRGBConfig(Config):
@@ -41,10 +52,6 @@ class ElevatorRGBConfig(Config):
     # smaller anchors, since images are 512x512
     RPN_ANCHOR_SCALES = (16, 32, 64, 128, 256)
 
-    # Reduce training ROIs per image because the images are small and have
-    # few objects. Aim to allow ROI sampling to pick 33% positive ROIs.
-    # TRAIN_ROIS_PER_IMAGE = 32
-
     # Use a small epoch since the data is simple
     STEPS_PER_EPOCH = 100
 
@@ -53,6 +60,11 @@ class ElevatorRGBConfig(Config):
 
     # Skip detections with < 90% confidence
     # DETECTION_MIN_CONFIDENCE = 0.9
+
+    # Maximum number of ground truth instances to use in one image
+    # there are only few objects per image in the elevator dataset
+    # see: class_distribution.py
+    MAX_GT_INSTANCES = 16
 
 
 class ElevatorRGBDataset(utils.Dataset):
@@ -138,3 +150,271 @@ class ElevatorRGBDataset(utils.Dataset):
 
         return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
                                 class_name_to_id=self.class_name_to_id)
+
+
+def run_training():
+    config = ElevatorRGBConfig()
+    config.display()
+
+    # Training dataset
+    dataset_train = ElevatorRGBDataset()
+    dataset_train.load_elevator_rgb(args.data_dir, "train")
+    dataset_train.prepare()
+
+    # Validation dataset
+    dataset_val = ElevatorRGBDataset()
+    dataset_val.load_elevator_rgb(args.data_dir, "validation")
+    dataset_val.prepare()
+
+    print("Image Count: {}".format(len(dataset_train.image_ids)))
+    print("Class Count: {}".format(dataset_train.num_classes))
+    for i, info in enumerate(dataset_train.class_info):
+        print("{:3}. {:50}".format(i, info['name']))
+
+    print("Image Count: {}".format(len(dataset_val.image_ids)))
+    print("Class Count: {}".format(dataset_val.num_classes))
+    for i, info in enumerate(dataset_val.class_info):
+        print("{:3}. {:50}".format(i, info['name']))
+
+    # Create model in training mode
+    model = MaskRCNN(mode="training", config=config,
+                     model_dir=args.model_dir)
+
+    model.load_weights(args.coco_path, by_name=True,
+                       exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",
+                                "mrcnn_bbox", "mrcnn_mask"])
+
+    augmentation = iaa.Sequential([
+        iaa.Sometimes(0.5, iaa.CropAndPad(
+            percent=(-0.05, 0.1),
+            pad_mode=ia.ALL,
+            pad_cval=(0, 255)
+        )),
+        iaa.Sometimes(0.5, iaa.Affine(
+            scale={"x": (0.9, 1.1), "y": (0.9, 1.1)},
+            translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
+            rotate=(-30, 30),
+            shear=(-8, 8),
+            order=[0, 1],
+            cval=(0, 255),
+            mode=ia.ALL
+        )),
+        iaa.Fliplr(0.5)
+    ])
+
+    print(model.keras_model.summary())
+
+    # Train the head branches
+    # Passing layers="heads" freezes all layers except the head
+    # layers. You can also pass a regular expression to select
+    # which layers to train by name pattern.
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE,
+                epochs=10,
+                layers='heads',
+                augmentation=augmentation)
+
+    # Fine tune all layers
+    # Passing layers="all" trains all layers. You can also
+    # pass a regular expression to select which layers to
+    # train by name pattern.
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE / 10,
+                epochs=20,
+                layers="all",
+                augmentation=augmentation)
+
+    # Save weights
+    # Typically not needed because callbacks save after every epoch
+    # Uncomment to save manually
+    model_path = os.path.join(args.model_dir, args.output)
+    print(model_path)
+    model.keras_model.save_weights(model_path)
+
+
+def calc_mean_average_precision(dataset_val, inference_config, model):
+    # Compute VOC-Style mAP @ IoU=0.5
+    # Running on 10 images. Increase for better accuracy.
+    image_ids = np.random.choice(dataset_val.image_ids, 100)
+    APs = []
+    for image_id in image_ids:
+        # Load image and ground truth data
+        image, image_meta, gt_class_id, gt_bbox, gt_mask = \
+            modellib.load_image_gt(dataset_val, inference_config,
+                                   image_id, use_mini_mask=False)
+        molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
+        # Run object detection
+        results = model.detect([image], verbose=0)
+        r = results[0]
+        # Compute AP
+        AP, precisions, recalls, overlaps = \
+            utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
+                             r["rois"], r["class_ids"], r["scores"], r['masks'])
+        APs.append(AP)
+    return np.mean(APs)
+
+
+def run_inference():
+    # Training dataset
+    dataset_train = ElevatorRGBDataset()
+    dataset_train.load_elevator_rgb(args.data_dir, "train")
+    dataset_train.prepare()
+
+    # Validation dataset
+    dataset_val = ElevatorRGBDataset()
+    dataset_val.load_elevator_rgb(args.data_dir, "validation")
+    dataset_val.prepare()
+
+    class InferenceConfig(ElevatorRGBConfig):
+        GPU_COUNT = 1
+        IMAGES_PER_GPU = 1
+
+    inference_config = InferenceConfig()
+
+    # Recreate the model in inference mode
+    model = MaskRCNN(mode="inference",
+                     config=inference_config,
+                     model_dir=args.model_dir)
+
+    # Get path to saved weights
+    # Either set a specific path or find last trained weights
+    model_path = os.path.join(args.model_dir, "mask_rcnn_elevator_rgb.h5")
+
+    # Load trained weights
+    print("Loading weights from ", model_path)
+    model.load_weights(model_path, by_name=True)
+
+    # Test on a random image
+    image_id = random.choice(dataset_val.image_ids)
+    original_image, image_meta, gt_class_id, gt_bbox, gt_mask = \
+        modellib.load_image_gt(dataset_val, inference_config,
+                               image_id, use_mini_mask=False)
+
+    log("original_image", original_image)
+    log("image_meta", image_meta)
+    log("gt_class_id", gt_class_id)
+    log("gt_bbox", gt_bbox)
+    log("gt_mask", gt_mask)
+
+    visualize.display_instances(original_image, gt_bbox, gt_mask, gt_class_id,
+                                dataset_train.class_names, figsize=(8, 8))
+
+    results = model.detect([original_image], verbose=1)
+
+    r = results[0]
+    visualize.display_instances(original_image, r['rois'], r['masks'], r['class_ids'],
+                                dataset_val.class_names, r['scores'])
+
+    mean_average_precision = calc_mean_average_precision(dataset_val=dataset_val, inference_config=inference_config,
+                                                         model=model)
+    print("mAP: ", mean_average_precision)
+
+
+def train_with_config(config, epochs):
+    # Training dataset
+    dataset_train = ElevatorRGBDataset()
+    dataset_train.load_elevator_rgb(args.data_dir, "train")
+    dataset_train.prepare()
+
+    # Validation dataset
+    dataset_val = ElevatorRGBDataset()
+    dataset_val.load_elevator_rgb(args.data_dir, "validation")
+    dataset_val.prepare()
+
+    # Create model in training mode
+    model = MaskRCNN(mode="training", config=config,
+                     model_dir=args.model_dir)
+
+    """
+        iaa.Sometimes(0.5, iaa.CropAndPad(
+            percent=(-0.05, 0.1),
+            pad_mode=ia.ALL,
+            pad_cval=(0, 255)
+        )),
+        iaa.Sometimes(0.5, iaa.Affine(
+            scale={"x": (0.9, 1.1), "y": (0.9, 1.1)},
+            translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
+            rotate=(-30, 30),
+            shear=(-8, 8),
+            order=[0, 1],
+            cval=(0, 255),
+            mode=ia.ALL
+        )),
+    """
+    augmentation = iaa.Sequential([
+        iaa.Fliplr(0.5)
+    ])
+
+    # Train the head branches
+    # Passing layers="heads" freezes all layers except the head
+    # layers. You can also pass a regular expression to select
+    # which layers to train by name pattern.
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE,
+                epochs=epochs,
+                layers='all',
+                augmentation=augmentation)
+
+    inference_config = copy.deepcopy(config)
+    inference_config.GPU_COUNT = 1
+    inference_config.IMAGES_PER_GPU = 1
+
+    mean_average_precision = calc_mean_average_precision(dataset_val=dataset_val, inference_config=inference_config,
+                                                         model=model)
+    print("mAP: ", mean_average_precision)
+    return mean_average_precision
+
+
+def run_grid_search():
+    """
+    search for best configurations for parameters:
+    TRAIN_ROIS_PER_IMAGE
+    DETECTION_MIN_CONFIDENCE
+    """
+    train_rois_per_image = [32, 64, 128, 256, 512]
+    detection_min_confidence = [0.5, 0.6, 0.7, 0.8, 0.9]
+    config = ElevatorRGBConfig()
+
+    # fix random seed for reproducibility
+    seed = 7
+    np.random.seed(seed)
+
+    epochs = 1
+
+    result = np.zeros([len(train_rois_per_image), len(detection_min_confidence)])
+
+    i = 0
+    j = 0
+    for trpi in train_rois_per_image:
+        for dmc in detection_min_confidence:
+            print("train rois per image", trpi)
+            print("detection min confidence", dmc)
+            config.TRAIN_ROIS_PER_IMAGE = trpi
+            config.DETECTION_MIN_CONFIDENCE = dmc
+            result[i][j] = train_with_config(config=config, epochs=epochs)
+            i = i + 1
+            j = j + 1
+        j = 0
+
+    print(result)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
+                        default=ROOT_DIR + "datasets/elevator/preprocessed/")
+    parser.add_argument("-m", "--model_dir", type=str, help="Input index file",
+                        default=ROOT_DIR + "logs/")
+    parser.add_argument("-c", "--coco_path", type=str, help="Path to pretrained coco weights",
+                        default=ROOT_DIR + "mask_rcnn_coco.h5")
+    parser.add_argument("-o", "--output", type=str, help="Name of output weights",
+                        default="mask_rcnn_elevator_rgb.h5")
+    parser.add_argument("-n", "--mode", type=str, help="[training, inference, grid_search]",
+                        default="grid_search")
+    args = parser.parse_args()
+    if args.mode == "training":
+        run_training()
+    if args.mode == "inference":
+        run_inference()
+    if args.mode == "grid_search":
+        run_grid_search()
