@@ -355,12 +355,22 @@ def train_with_config(config, epochs):
                 layers='all',
                 augmentation=augmentation)
 
+    model_path = args.model_dir + "elevator_rgb_" + \
+                 str(config.TRAIN_ROIS_PER_IMAGE) + "_" + \
+                 str(config.DETECTION_MIN_CONFIDENCE) + ".h5"
+
+    model.keras_model.save_weights(model_path)
+
     inference_config = copy.deepcopy(config)
     inference_config.GPU_COUNT = 1
     inference_config.IMAGES_PER_GPU = 1
+    inference_model = MaskRCNN(mode="inference",
+                               config=inference_config,
+                               model_dir=args.model_dir)
+    inference_model.load_weights(model_path, by_name=True)
 
     mean_average_precision = calc_mean_average_precision(dataset_val=dataset_val, inference_config=inference_config,
-                                                         model=model)
+                                                         model=inference_model)
     print("mAP: ", mean_average_precision)
     return mean_average_precision
 
