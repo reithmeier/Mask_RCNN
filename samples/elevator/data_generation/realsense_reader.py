@@ -53,10 +53,11 @@ def process_frames(rgb_dir, dpt_dir, dpt_raw_dir, rgb_itc_dir, dpt_itc_dir, lbl_
 
     try:
         config = rs.config()
+        print(args.bag_directory + args.bag_file)
         rs.config.enable_device_from_file(config, args.bag_directory + args.bag_file, repeat_playback=False)
         pipeline = rs.pipeline()
-        config.enable_stream(rs.stream.depth, rs.format.z16, 30)
-        config.enable_stream(rs.stream.color, rs.format.rgb8, 30)
+        config.enable_stream(rs.stream.depth)
+        config.enable_stream(rs.stream.color)
         profile = pipeline.start(config)
         align_to = rs.stream.color
         align = rs.align(align_to)
@@ -137,11 +138,11 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--directory", type=str, help="Path to save the images",
-                        default=ROOT_DIR + "/datasets/elevator/20190515_201521/out/")
+                        default=ROOT_DIR + "/datasets/elevator/Intel_N_6-3_3-3_2/out/")
     parser.add_argument("-i", "--bag_directory", type=str, help="Bag file directory",
-                        default=ROOT_DIR + "/datasets/elevator/20190515_201521/")
+                        default=ROOT_DIR + "/datasets/elevator/Intel_N_6-3_3-3_2/")
     parser.add_argument("-b", "--bag_file", type=str, help="Bag file to read",
-                        default="20190515_201521.bag")
+                        default="Intel_N_6-3_3-3_2.bag")
     args = parser.parse_args()
 
     main()

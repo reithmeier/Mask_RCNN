@@ -5,9 +5,9 @@ import numpy as np
 
 ROOT_DIR = os.path.abspath("./../../..")
 
-TRN = 0.6
+TRN = 0.7
 VAL = 0.2
-TST = 0.2
+TST = 0.1
 
 
 def main():
@@ -55,8 +55,8 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output", type=str, help="Path to save the split files",
-                        default=ROOT_DIR + "/datasets/elevator/out/split")
+                        default=ROOT_DIR + "/datasets/elevator/preprocessed/split")
     parser.add_argument("-i", "--input", type=str, help="Input index file",
-                        default=ROOT_DIR + "/datasets/elevator/out/trimmed.txt")
+                        default=ROOT_DIR + "/datasets/elevator/preprocessed/all.txt")
     args = parser.parse_args()
     main()

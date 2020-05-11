@@ -65,6 +65,9 @@ def resize_lbl(file):
             for result in completion["result"]:
                 if result["type"] != "polygonlabels":
                     continue
+                if "points" not in result["value"]:
+                    print("ERROR: polygon has unknown format")
+                    continue  # rare case when label-studio changes format for some polygons
                 height = result["original_height"]
                 width = result["original_width"]
                 result["original_height"] = args.height
@@ -89,7 +92,9 @@ def contains_labels(lbl_filename):
     with open(lbl_filename) as lbl_file:
         data = json.load(lbl_file)
         annotations = data['completions'][-1]["result"]
-        return len(annotations) > 0
+        # label-studio rarely uses different format for polygons
+        filtered_annotations = [a for a in annotations if a["type"] == "polygonlabels" and "format" in a["value"]]
+        return len(annotations) > 0 and len(filtered_annotations) == 0
 
 
 def requirements_met(line):
@@ -152,9 +157,9 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--output", type=str, help="Path of the output directory",
-                        default=ROOT_DIR + "/datasets/elevator/N_18-3_2-0_2/preprocessed")
+                        default=ROOT_DIR + "/datasets/elevator/Intel_N_6-3_3-3_1/preprocessed")
     parser.add_argument("-i", "--input", type=str, help="Path of the input directory",
-                        default=ROOT_DIR + "/datasets/elevator/N_18-3_2-0_2/out")
+                        default=ROOT_DIR + "/datasets/elevator/Intel_N_6-3_3-3_1/out")
     parser.add_argument("-w", "--width", type=int, help="Width to resize to", default=512)
     parser.add_argument("-j", "--height", type=int, help="Height to resize to", default=512)
 

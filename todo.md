@@ -1,7 +1,7 @@
 #### still to do:
 
 Data generation:
-* label data
+* ~~label data~~
 * synthetic data generation + GAN Image Style Transfer
 
 Preprocessing:
@@ -9,16 +9,19 @@ Preprocessing:
 * ~~downsample door~~
 * ~~preprocess elevator images~~
 * ~~split elevator images 60/20/20~~
-* HAA features
+* ~~HAA features~~
 
 Elevator MRCNN:
 * ~~elevator MRCNN config~~
 * ~~inspect data~~
 * ~~train model~~
 * ~~Relations to mask merging~~
+* data augmentation
+* hyper parameter optimization
+* run comparisons
 
 MRCNN:
 * ~~MRCNN forced 1024x1024 to 52x512~~
-* backbone resnet, parallel resnet with RGB and depth branch
+* ~~backbone resnet, parallel resnet with RGB and depth branch~~
 
 
