@@ -12,20 +12,20 @@ import sys
 import imgaug as ia
 import imgaug.augmenters as iaa
 import numpy as np
-import util
-
-from mrcnn.model import MaskRCNN
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
 
 # Import Mask RCNN
+sys.path.append('.')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn.config import Config
 from mrcnn import utils
 import mrcnn.model as modellib
 from mrcnn import visualize
 from mrcnn.model import log
+from mrcnn.model import MaskRCNN
+from samples.elevator.util.util import create_mask
 
 
 class ElevatorRGBConfig(Config):
@@ -148,8 +148,8 @@ class ElevatorRGBDataset(utils.Dataset):
         if image_info["source"] != "elevator_rgb":
             return super(self.__class__, self).load_mask(image_id)
 
-        return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
-                                class_name_to_id=self.class_name_to_id)
+        return create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
+                           class_name_to_id=self.class_name_to_id)
 
 
 def run_training():
@@ -310,20 +310,20 @@ def run_inference():
     print("mAP: ", mean_average_precision)
 
 
-def train_with_config(config, epochs):
+def train_with_config(config, epochs, data_dir, model_dir):
     # Training dataset
     dataset_train = ElevatorRGBDataset()
-    dataset_train.load_elevator_rgb(args.data_dir, "train")
+    dataset_train.load_elevator_rgb(data_dir, "train")
     dataset_train.prepare()
 
     # Validation dataset
     dataset_val = ElevatorRGBDataset()
-    dataset_val.load_elevator_rgb(args.data_dir, "validation")
+    dataset_val.load_elevator_rgb(data_dir, "validation")
     dataset_val.prepare()
 
     # Create model in training mode
     model = MaskRCNN(mode="training", config=config,
-                     model_dir=args.model_dir)
+                     model_dir=model_dir)
 
     """
         iaa.Sometimes(0.5, iaa.CropAndPad(
@@ -345,17 +345,30 @@ def train_with_config(config, epochs):
         iaa.Fliplr(0.5)
     ])
 
-    # Train the head branches
-    # Passing layers="heads" freezes all layers except the head
-    # layers. You can also pass a regular expression to select
-    # which layers to train by name pattern.
+    # training stage 1
+    print("Train head layers")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
-                epochs=epochs,
+                epochs=epochs[0],
+                layers='heads',
+                augmentation=augmentation)
+    # training stage 2
+    print("Fine tune ResNet layers 4+")
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE,
+                epochs=epochs[1],
+                layers='4+',
+                augmentation=augmentation)
+
+    # training stage 3
+    print("Fine tune all layers")
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE / 10,
+                epochs=epochs[2],
                 layers='all',
                 augmentation=augmentation)
 
-    model_path = args.model_dir + "elevator_rgb_" + \
+    model_path = model_dir + "elevator_rgb_" + \
                  str(config.TRAIN_ROIS_PER_IMAGE) + "_" + \
                  str(config.DETECTION_MIN_CONFIDENCE) + ".h5"
 
@@ -366,7 +379,7 @@ def train_with_config(config, epochs):
     inference_config.IMAGES_PER_GPU = 1
     inference_model = MaskRCNN(mode="inference",
                                config=inference_config,
-                               model_dir=args.model_dir)
+                               model_dir=model_dir)
     inference_model.load_weights(model_path, by_name=True)
 
     mean_average_precision = calc_mean_average_precision(dataset_val=dataset_val, inference_config=inference_config,
@@ -375,7 +388,7 @@ def train_with_config(config, epochs):
     return mean_average_precision
 
 
-def run_grid_search():
+def run_grid_search(data_dir, model_dir):
     """
     search for best configurations for parameters:
     TRAIN_ROIS_PER_IMAGE
@@ -389,10 +402,12 @@ def run_grid_search():
     seed = 7
     np.random.seed(seed)
 
-    epochs = 1
+    epochs = [20, 40, 80]
 
     result = np.zeros([len(train_rois_per_image), len(detection_min_confidence)])
 
+    train_with_config(config=config, epochs=epochs, data_dir=data_dir, model_dir=model_dir)
+    """
     i = 0
     j = 0
     for trpi in train_rois_per_image:
@@ -401,18 +416,19 @@ def run_grid_search():
             print("detection min confidence", dmc)
             config.TRAIN_ROIS_PER_IMAGE = trpi
             config.DETECTION_MIN_CONFIDENCE = dmc
-            result[i][j] = train_with_config(config=config, epochs=epochs)
+            result[i][j] = train_with_config(config=config, epochs=epochs, data_dir=data_dir, model_dir=model_dir)
             i = i + 1
             j = j + 1
         j = 0
 
     print(result)
+    """
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
-                        default=ROOT_DIR + "datasets/elevator/preprocessed/")
+                        default=os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Input index file",
                         default=ROOT_DIR + "logs/")
     parser.add_argument("-c", "--coco_path", type=str, help="Path to pretrained coco weights",
@@ -427,4 +443,4 @@ if __name__ == "__main__":
     if args.mode == "inference":
         run_inference()
     if args.mode == "grid_search":
-        run_grid_search()
+        run_grid_search(args.data_dir, args.model_dir)
