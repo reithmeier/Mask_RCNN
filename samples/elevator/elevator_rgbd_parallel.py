@@ -11,17 +11,18 @@ import sys
 
 import numpy as np
 import skimage.draw
-
-from . import util
+import skimage.io
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
 
 # Import Mask RCNN
+sys.path.append('.')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 
 from mrcnn import utils
 from samples.elevator.elevator_rgb import ElevatorRGBConfig
+from samples.elevator.util.util import create_mask
 
 
 class ElevatorRGBDParallelConfig(ElevatorRGBConfig):
@@ -122,8 +123,8 @@ class ElevatorRGBDParallelDataset(utils.Dataset):
         if image_info["source"] != "elevator_rgbd_parallel":
             return super(self.__class__, self).load_mask(image_id)
 
-        return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
-                                class_name_to_id=self.class_name_to_id)
+        return create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
+                           class_name_to_id=self.class_name_to_id)
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,4] Numpy array.

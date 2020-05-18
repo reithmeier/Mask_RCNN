@@ -6,6 +6,12 @@ import imgaug.augmenters as iaa
 import numpy as np
 
 import tensorflow.logging as logging
+
+from samples.sun.sund3 import SunD3Config, SunD3Dataset
+from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
+from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
+from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
+
 logging.set_verbosity(logging.ERROR)
 
 # Root directory of the project
@@ -23,11 +29,12 @@ from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDatas
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 
 
-def train_model(config, dataset_train, dataset_val, epochs, model_dir):
+def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, load_model, model_name):
     # Create model in training mode
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=model_dir)
-
+    if load_model:
+        model.keras_model.load_weights(model_dir + model_name)
     """
         iaa.Sometimes(0.5, iaa.CropAndPad(
             percent=(-0.05, 0.1),
@@ -44,32 +51,62 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir):
             mode=ia.ALL
         )),
     """
-    augmentation = iaa.Sequential([
-        iaa.Fliplr(0.5)
-    ])
+    if augment:
+        augmentation = iaa.Sequential([
+            iaa.Fliplr(0.5)
+        ])
+    else:
+        augmentation = iaa.Sequential()
 
-    # training stage 1
-    print("Train head layers")
-    model.train(dataset_train, dataset_val,
-                learning_rate=config.LEARNING_RATE,
-                epochs=epochs[0],
-                layers='heads',
-                augmentation=augmentation)
-    # training stage 2
-    print("Fine tune ResNet layers 4+")
-    model.train(dataset_train, dataset_val,
-                learning_rate=config.LEARNING_RATE,
-                epochs=epochs[1],
-                layers='4+',
-                augmentation=augmentation)
+    ALTERNATIVE_TRAINING = False
 
-    # training stage 3
-    print("Fine tune all layers")
-    model.train(dataset_train, dataset_val,
-                learning_rate=config.LEARNING_RATE / 10,
-                epochs=epochs[2],
-                layers='all',
-                augmentation=augmentation)
+    if not ALTERNATIVE_TRAINING:
+        # training stage 1
+        print("Train head layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE * 5,
+                    epochs=epochs[0],
+                    layers='heads',
+                    augmentation=augmentation)
+        # training stage 2
+        print("Fine tune ResNet layers 4+")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=epochs[1],
+                    layers='4+',
+                    augmentation=augmentation)
+
+        # training stage 3
+        print("Fine tune all layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE / 5,
+                    epochs=epochs[2],
+                    layers='all',
+                    augmentation=augmentation)
+
+    else:
+        # training stage 1
+        print("Train all layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE * 5,
+                    epochs=epochs[0],
+                    layers='all',
+                    augmentation=augmentation)
+        # training stage 2
+        print("Fine tune ResNet layers 4+")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE,
+                    epochs=epochs[1],
+                    layers='4+',
+                    augmentation=augmentation)
+
+        # training stage 3
+        print("Train head layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE / 5,
+                    epochs=epochs[2],
+                    layers='heads',
+                    augmentation=augmentation)
 
     return model
 
@@ -108,43 +145,78 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs)
 
 
-def main(strategy, data_dir, model_dir):
-    if strategy == "D3":
-        config = ElevatorD3Config()
-        dataset_train = ElevatorD3Dataset()
-        dataset_train.load_elevator_d3(data_dir, "train")
-        dataset_train.prepare()
-        dataset_val = ElevatorD3Dataset()
-        dataset_val.load_elevator_d3(data_dir, "validation")
-        dataset_val.prepare()
-    elif strategy == "RGBD":
-        config = ElevatorRGBDConfig()
-        dataset_train = ElevatorRGBDDataset()
-        dataset_train.load_elevator_rgbd(data_dir, "train")
-        dataset_train.prepare()
-        dataset_val = ElevatorRGBDDataset()
-        dataset_val.load_elevator_rgbd(data_dir, "validation")
-        dataset_val.prepare()
-    elif strategy == "RGBDParallel":
-        config = ElevatorRGBDParallelConfig()
-        dataset_train = ElevatorRGBDParallelDataset()
-        dataset_train.load_elevator_rgbd_parallel(data_dir, "train")
-        dataset_train.prepare()
-        dataset_val = ElevatorRGBDParallelDataset()
-        dataset_val.load_elevator_rgbd_parallel(data_dir, "validation")
-        dataset_val.prepare()
+def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name):
+    if data_set == "ELEVATOR":
+        if strategy == "D3":
+            config = ElevatorD3Config()
+            dataset_train = ElevatorD3Dataset()
+            dataset_train.load_elevator_d3(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorD3Dataset()
+            dataset_val.load_elevator_d3(data_dir, "validation")
+            dataset_val.prepare()
+        elif strategy == "RGBD":
+            config = ElevatorRGBDConfig()
+            dataset_train = ElevatorRGBDDataset()
+            dataset_train.load_elevator_rgbd(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorRGBDDataset()
+            dataset_val.load_elevator_rgbd(data_dir, "validation")
+            dataset_val.prepare()
+        elif strategy == "RGBDParallel":
+            config = ElevatorRGBDParallelConfig()
+            dataset_train = ElevatorRGBDParallelDataset()
+            dataset_train.load_elevator_rgbd_parallel(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorRGBDParallelDataset()
+            dataset_val.load_elevator_rgbd_parallel(data_dir, "validation")
+            dataset_val.prepare()
+        else:
+            config = ElevatorRGBConfig()
+            dataset_train = ElevatorRGBDataset()
+            dataset_train.load_elevator_rgb(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorRGBDataset()
+            dataset_val.load_elevator_rgb(data_dir, "validation")
+            dataset_val.prepare()
     else:
-        config = ElevatorRGBConfig()
-        dataset_train = ElevatorRGBDataset()
-        dataset_train.load_elevator_rgb(data_dir, "train")
-        dataset_train.prepare()
-        dataset_val = ElevatorRGBDataset()
-        dataset_val.load_elevator_rgb(data_dir, "validation")
-        dataset_val.prepare()
+        if strategy == "D3":
+            config = SunD3Config()
+            dataset_train = SunD3Dataset()
+            dataset_train.load_sun_d3(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunD3Dataset()
+            dataset_val.load_sun_d3(data_dir, "split/val13")
+            dataset_val.prepare()
+        elif strategy == "RGBD":
+            config = SunRGBDConfig()
+            dataset_train = SunRGBDDataset()
+            dataset_train.load_sun_rgbd(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunRGBDDataset()
+            dataset_val.load_sun_rgbd(data_dir, "split/val13")
+            dataset_val.prepare()
+        elif strategy == "RGBDParallel":
+            config = SunRGBDParallelConfig()
+            dataset_train = SunRGBDParallelDataset()
+            dataset_train.load_sun_rgbd_parallel(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunRGBDParallelDataset()
+            dataset_val.load_sun_rgbd_parallel(data_dir, "split/val13")
+            dataset_val.prepare()
+        else:
+            config = SunRGBConfig()
+            dataset_train = SunRGBDataset()
+            dataset_train.load_sun_rgb(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunRGBDataset()
+            dataset_val.load_sun_rgb(data_dir, "split/val13")
+            dataset_val.prepare()
+
     epochs = [20, 40, 80]
-    model_path = model_dir + "elevator_" + strategy + ".h5"
+    model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
-                        model_dir=model_dir)
+                        model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name)
     model.keras_model.save_weights(model_path)
 
     inference_calculation(config=config, model_dir=model_dir, model_path=model_path, dataset_val=dataset_val)
@@ -153,10 +225,13 @@ def main(strategy, data_dir, model_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
-                        default=ROOT_DIR + "datasets/elevator/preprocessed/")# os.path.abspath("I:\Data\elevator\preprocessed"))
+                        default=os.path.abspath(
+                            "I:\Data\elevator\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "logs/")
-    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGB")
+    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGBDParallel")
+    parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
-    main(strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir)
+    main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
+         load_model=True, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5")
