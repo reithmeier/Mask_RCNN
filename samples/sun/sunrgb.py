@@ -104,12 +104,17 @@ class SunRGBDataset(utils.Dataset):
             lbl_image_path = os.path.join(dataset_dir, lbl_image)
             rgb_image_path = rgb_image_path.strip()
             lbl_image_path = lbl_image_path.strip()
+            msk_full_path = lbl_image_path + ".mask.npy"
+            cls_full_path = lbl_image_path + ".class_ids.npy"
 
             self.add_image(
                 "sunrgb",
                 image_id=rgb_image,  # use file name as a unique image id
                 path=rgb_image_path,
-                lbl_image_path=lbl_image_path)
+                lbl_image_path=lbl_image_path,
+                msk_full_path=msk_full_path,
+                cls_full_path=cls_full_path
+            )
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -130,7 +135,11 @@ class SunRGBDataset(utils.Dataset):
         image_info = self.image_info[image_id]
         if image_info["source"] != "sunrgb":
             return super(self.__class__, self).load_mask(image_id)
+        masks = np.load(image_info["msk_full_path"])
+        class_ids = np.load(image_info["cls_full_path"])
+        return masks, class_ids
 
+        """
         # Convert polygons to a bitmap mask of shape
         # [height, width, instance_count]
         info = self.image_info[image_id]
@@ -166,3 +175,4 @@ class SunRGBDataset(utils.Dataset):
 
         cv2.waitKey(0)
         return mask, np.array(class_ids)
+        """

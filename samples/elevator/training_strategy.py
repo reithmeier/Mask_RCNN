@@ -4,7 +4,6 @@ import sys
 
 import imgaug.augmenters as iaa
 import numpy as np
-
 import tensorflow.logging as logging
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
@@ -29,12 +28,13 @@ from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDatas
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 
 
-def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, load_model, model_name):
+def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, load_model, model_name, init_epoch):
     # Create model in training mode
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=model_dir)
     if load_model:
         model.keras_model.load_weights(model_dir + model_name)
+        model.epoch = init_epoch
     """
         iaa.Sometimes(0.5, iaa.CropAndPad(
             percent=(-0.05, 0.1),
@@ -64,7 +64,7 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
         # training stage 1
         print("Train head layers")
         model.train(dataset_train, dataset_val,
-                    learning_rate=config.LEARNING_RATE * 5,
+                    learning_rate=config.LEARNING_RATE,
                     epochs=epochs[0],
                     layers='heads',
                     augmentation=augmentation)
@@ -79,7 +79,7 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
         # training stage 3
         print("Fine tune all layers")
         model.train(dataset_train, dataset_val,
-                    learning_rate=config.LEARNING_RATE / 5,
+                    learning_rate=config.LEARNING_RATE / 10,
                     epochs=epochs[2],
                     layers='all',
                     augmentation=augmentation)
@@ -145,7 +145,7 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs)
 
 
-def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name):
+def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch):
     if data_set == "ELEVATOR":
         if strategy == "D3":
             config = ElevatorD3Config()
@@ -216,7 +216,8 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
     epochs = [20, 40, 80]
     model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
-                        model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name)
+                        model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name,
+                        init_epoch=init_epoch)
     model.keras_model.save_weights(model_path)
 
     inference_calculation(config=config, model_dir=model_dir, model_path=model_path, dataset_val=dataset_val)
@@ -234,4 +235,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
-         load_model=True, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5")
+         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1)
