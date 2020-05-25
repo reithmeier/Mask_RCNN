@@ -4,14 +4,12 @@ import sys
 
 import imgaug.augmenters as iaa
 import numpy as np
-import tensorflow.logging as logging
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
 from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
 from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
 
-logging.set_verbosity(logging.ERROR)
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -32,6 +30,7 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
     # Create model in training mode
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=model_dir)
+    print(model.keras_model.summary())
     if load_model:
         model.keras_model.load_weights(model_dir + model_name)
         model.epoch = init_epoch
