@@ -7,7 +7,6 @@ Licensed under the MIT License (see LICENSE for details)
 Written by Waleed Abdulla
 """
 
-import sys
 import datetime
 import logging
 import math
@@ -200,6 +199,7 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
         input_image_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
         input_image_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
 
+        """
         C1_RGB, C2_RGB, C3_RGB, C4_RGB, C5_RGB = resnet_graph(input_image=input_image_rgb,
                                                               architecture=architecture,
                                                               stage5=stage5, train_bn=train_bn, postfix="_rgb")
@@ -212,9 +212,92 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
                fusion(C3_RGB, C3_D), \
                fusion(C4_RGB, C4_D), \
                fusion(C5_RGB, C5_D)
+        """
+
+        return resnet_graph_parallel(input_image_rgb=input_image_rgb, input_image_dpt=input_image_dpt,
+                                     architecture=architecture, stage5=stage5, train_bn=train_bn)
 
     else:
         return resnet_graph(input_image=input_image, architecture=architecture, stage5=stage5, train_bn=train_bn)
+
+
+def resnet_stage_1(input_image, postfix, train_bn):
+    # Stage 1 RGB
+    x = KL.ZeroPadding2D((3, 3))(input_image)
+    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1' + postfix, use_bias=True)(x)
+    x = BatchNorm(name='bn_conv1' + postfix)(x, training=train_bn)
+    x = KL.Activation('relu')(x)
+    C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
+    return C1
+
+
+def resnet_stage_2(input_layer, postfix, train_bn):
+    x = conv_block(input_layer, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn,
+                   postfix=postfix)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix)
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix)
+    return C2
+
+
+def resnet_stage_3(input_layer, postfix, train_bn):
+    x = conv_block(input_layer, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix)
+    return C3
+
+
+def resnet_stage_4(input_layer, postfix, train_bn, architecture):
+    x = conv_block(input_layer, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix)
+    block_count = {"resnet50": 5, "resnet101": 22}[architecture]
+    for i in range(block_count):
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix)
+    C4 = x
+    return C4
+
+
+def resnet_stage_5(input_layer, postfix, train_bn, ):
+    x = conv_block(input_layer, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix)
+    C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix)
+    return C5
+
+
+def resnet_graph_parallel(input_image_rgb, input_image_dpt, architecture, stage5=False, train_bn=True):
+    """Build a ResNet graph with 2 parallel branches.
+        architecture: Can be resnet50 or resnet101
+        stage5: Boolean. If False, stage5 of the network is not created
+        train_bn: Boolean. Train or freeze Batch Norm layers
+    """
+    assert architecture in ["resnet50", "resnet101"]
+    # Stage 1 RGB
+    C1_rgb = resnet_stage_1(input_image=input_image_rgb, postfix="rgb", train_bn=train_bn)
+    C1_dpt = resnet_stage_1(input_image=input_image_dpt, postfix="dpt", train_bn=train_bn)
+    C1 = fusion(C1_rgb, C1_dpt)
+
+    # Stage 2
+    C2_rgb = resnet_stage_2(input_layer=C1, postfix="rgb", train_bn=train_bn)
+    C2_dpt = resnet_stage_2(input_layer=C1_dpt, postfix="dpt", train_bn=train_bn)
+    C2 = fusion(C2_rgb, C2_dpt)
+
+    # Stage 3
+    C3_rgb = resnet_stage_3(input_layer=C2, postfix="rgb", train_bn=train_bn)
+    C3_dpt = resnet_stage_3(input_layer=C2_dpt, postfix="dpt", train_bn=train_bn)
+    C3 = fusion(C3_rgb, C3_dpt)
+
+    # Stage 4
+    C4_rgb = resnet_stage_4(input_layer=C3, postfix="rgb", train_bn=train_bn, architecture=architecture)
+    C4_dpt = resnet_stage_4(input_layer=C3_dpt, postfix="dpt", train_bn=train_bn, architecture=architecture)
+    C4 = fusion(C4_rgb, C4_dpt)
+
+    # Stage 5
+    if stage5:
+        C5_rgb = resnet_stage_5(input_layer=C4, postfix="rgb", train_bn=train_bn)
+        C5_dpt = resnet_stage_5(input_layer=C4_dpt, postfix="dpt", train_bn=train_bn)
+        C5 = fusion(C5_rgb, C5_dpt)
+    else:
+        C5 = None
+    return [C1, C2, C3, C4, C5]
 
 
 def resnet_graph(input_image, architecture, stage5=False, train_bn=True, postfix=""):
