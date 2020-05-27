@@ -26,7 +26,8 @@ from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDatas
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 
 
-def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, train_layers, load_model, model_name, init_epoch):
+def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, train_layers, load_model, model_name,
+                init_epoch):
     # Create model in training mode
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=model_dir)
@@ -130,10 +131,11 @@ def inference_calculation(config, model_dir, model_path, dataset_val):
                               model_dir=model_dir)
     model.load_weights(model_path, by_name=True)
 
-    mean_average_precision = calc_mean_average_precision(dataset_val=dataset_val, inference_config=config,
-                                                         model=model)
+    mean_average_precision, f1_score = calc_mean_average_precision(dataset_val=dataset_val, inference_config=config,
+                                                                   model=model)
     print("mAP: ", mean_average_precision)
-    return mean_average_precision
+    print("F1s: ", f1_score)
+    return mean_average_precision, f1_score
 
 
 def calc_mean_average_precision(dataset_val, inference_config, model):
@@ -141,6 +143,7 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     # Running on 10 images. Increase for better accuracy.
     image_ids = np.random.choice(dataset_val.image_ids, 100)
     APs = []
+    F1s = []
     for image_id in image_ids:
         # Load image and ground truth data
         image, image_meta, gt_class_id, gt_bbox, gt_mask = \
@@ -154,8 +157,12 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
         AP, precisions, recalls, overlaps = \
             utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
                              r["rois"], r["class_ids"], r["scores"], r['masks'])
+        precision = np.mean(precisions)
+        recall = np.mean(recalls)
+        F1_instance = 2 * (precision * recall) / (precision + recall)
         APs.append(AP)
-    return np.mean(APs)
+        F1s.append(F1_instance)
+    return np.mean(APs), np.mean(F1s)
 
 
 def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers):
@@ -226,7 +233,7 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
             dataset_val.load_sun_rgb(data_dir, "split/val13")
             dataset_val.prepare()
 
-    epochs = [20, 40, 80]
+    epochs = [60, 160, 300]
     model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
                         model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name,
@@ -240,10 +247,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "I:\Data\elevator\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "logs/")
-    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGBDParallel")
+    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGB")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
