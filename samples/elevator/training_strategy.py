@@ -3,13 +3,13 @@ import os
 import sys
 
 import imgaug.augmenters as iaa
+import keras
 import numpy as np
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
 from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
 from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
-
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -26,7 +26,7 @@ from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDatas
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 
 
-def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, load_model, model_name, init_epoch):
+def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, train_layers, load_model, model_name, init_epoch):
     # Create model in training mode
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=model_dir)
@@ -57,9 +57,9 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
     else:
         augmentation = iaa.Sequential()
 
-    ALTERNATIVE_TRAINING = False
+    train_layers = "all"
 
-    if not ALTERNATIVE_TRAINING:
+    if train_layers == "heads_4+_all":
         # training stage 1
         print("Train head layers")
         model.train(dataset_train, dataset_val,
@@ -83,7 +83,7 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
                     layers='all',
                     augmentation=augmentation)
 
-    else:
+    elif train_layers == "all_4+_heads":
         # training stage 1
         print("Train all layers")
         model.train(dataset_train, dataset_val,
@@ -107,6 +107,20 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
                     layers='heads',
                     augmentation=augmentation)
 
+    elif train_layers == "all":
+        custom_callbacks = [keras.callbacks.LearningRateScheduler(
+            lambda epoch_index: config.LEARNING_RATE * 5 if epoch_index < epochs[0]
+            else config.LEARNING_RATE if epoch_index < epochs[1]
+            else config.LEARNING_RATE / 10
+        )]
+        # training stage 1
+        print("Train all layers")
+        model.train(dataset_train, dataset_val,
+                    learning_rate=config.LEARNING_RATE * 5,
+                    epochs=epochs[2],
+                    layers='all',
+                    augmentation=augmentation,
+                    custom_callbacks=custom_callbacks)
     return model
 
 
@@ -144,7 +158,7 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs)
 
 
-def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch):
+def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers):
     if data_set == "ELEVATOR":
         if strategy == "D3":
             config = ElevatorD3Config()
@@ -216,7 +230,7 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
     model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
                         model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name,
-                        init_epoch=init_epoch)
+                        init_epoch=init_epoch, train_layers=train_layers)
     model.keras_model.save_weights(model_path)
 
     inference_calculation(config=config, model_dir=model_dir, model_path=model_path, dataset_val=dataset_val)
@@ -234,4 +248,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
-         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1)
+         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all")
