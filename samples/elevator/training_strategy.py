@@ -252,7 +252,7 @@ if __name__ == "__main__":
                         default=os.path.abspath(
                             "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
-                        default=ROOT_DIR + "logs/")
+                        default=ROOT_DIR + "/logs/")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGBDParallel")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
