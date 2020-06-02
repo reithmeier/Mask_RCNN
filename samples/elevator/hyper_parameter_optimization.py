@@ -108,12 +108,12 @@ def train_test_model(hparams, data_dir, log_dir, run_name):
 
     custom_callbacks = [hp.KerasCallback(log_dir, hparams)]
 
-    model = model.train(dataset_train, dataset_val,
-                        learning_rate=config.LEARNING_RATE,
-                        epochs=1,
-                        layers='all',
-                        augmentation=augmentation,
-                        custom_callbacks=custom_callbacks)
+    model.train(dataset_train, dataset_val,
+                learning_rate=config.LEARNING_RATE,
+                epochs=1,
+                layers='all',
+                augmentation=augmentation,
+                custom_callbacks=custom_callbacks)
 
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
