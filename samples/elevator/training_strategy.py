@@ -58,8 +58,6 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
     else:
         augmentation = iaa.Sequential()
 
-    train_layers = "all"
-
     if train_layers == "heads_4+_all":
         # training stage 1
         print("Train head layers")
@@ -165,7 +163,7 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs), np.mean(F1s)
 
 
-def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers):
+def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers, backbone, batch_size):
     if data_set == "ELEVATOR":
         if strategy == "D3":
             config = ElevatorD3Config()
@@ -233,7 +231,12 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
             dataset_val.load_sun_rgb(data_dir, "split/val13")
             dataset_val.prepare()
 
-    epochs = [60, 160, 300]
+    config.BACKBONE = backbone
+    config.BATCH_SIZE = batch_size
+    config.IMAGES_PER_GPU = batch_size
+    config.display()
+
+    epochs = [20, 40, 80]
     model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
                         model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name,
@@ -250,9 +253,10 @@ if __name__ == "__main__":
                             "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "logs/")
-    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGB")
+    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGBDParallel")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
-         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all")
+         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all",
+         backbone="resnet50", batch_size=2)
