@@ -16,7 +16,7 @@ Elevator MRCNN:
 * ~~inspect data~~
 * ~~train model~~
 * ~~Relations to mask merging~~
-* data augmentation
+* ~~data augmentation~~
 * hyper parameter optimization
 * run comparisons
 
