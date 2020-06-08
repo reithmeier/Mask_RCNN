@@ -214,6 +214,8 @@ class Config(object):
     # otherwise the default backbone is used
     PARALLEL_BACKBONE = False
 
+    OPTIMIZER = "SGD"
+
     def __init__(self):
         """Set values of computed attributes."""
         # Effective batch size

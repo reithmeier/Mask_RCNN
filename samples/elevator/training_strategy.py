@@ -163,7 +163,8 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs), np.mean(F1s)
 
 
-def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers, backbone, batch_size):
+def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_name, init_epoch, train_layers, backbone,
+         batch_size):
     if data_set == "ELEVATOR":
         if strategy == "D3":
             config = ElevatorD3Config()
@@ -234,6 +235,8 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
     config.BACKBONE = backbone
     config.BATCH_SIZE = batch_size
     config.IMAGES_PER_GPU = batch_size
+    config.OPTIMIZER = "ADAM"
+    config.LEARNING_RATE = 0.0001
     config.display()
 
     epochs = [20, 40, 80]
