@@ -22,7 +22,7 @@ from tensorboard.plugins.hparams import api as hp
 # hyper parameters
 
 HP_BACKBONE = hp.HParam('backbone', hp.Discrete(["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]))
-HP_TRAIN_ROIS_PER_IMAGE = hp.HParam('train_rois_per_image', hp.Discrete([50, 100, 200]))
+# HP_TRAIN_ROIS_PER_IMAGE = hp.HParam('train_rois_per_image', hp.Discrete([50, 100, 200]))
 HP_DETECTION_MIN_CONFIDENCE = hp.HParam('detection_min_confidence', hp.Discrete([0.6, 0.7, 0.8]))
 HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['ADAM', 'SGD']))
 
@@ -31,7 +31,7 @@ METRIC_F1S = 'f1 score'
 
 with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
     hp.hparams_config(
-        hparams=[HP_BACKBONE, HP_TRAIN_ROIS_PER_IMAGE, HP_DETECTION_MIN_CONFIDENCE, HP_OPTIMIZER],
+        hparams=[HP_BACKBONE, HP_DETECTION_MIN_CONFIDENCE, HP_OPTIMIZER],  # HP_TRAIN_ROIS_PER_IMAGE,
         metrics=[hp.Metric(METRIC_MAP, display_name='mean average precision'),
                  hp.Metric(METRIC_F1S, display_name='f1 score')]
     )
@@ -139,21 +139,21 @@ def main(data_dir, log_dir, epochs):
     session_num = 0
 
     for backbone in HP_BACKBONE.domain.values:
-        for train_rois_per_image in HP_TRAIN_ROIS_PER_IMAGE.domain.values:
-            for detection_min_confidence in HP_DETECTION_MIN_CONFIDENCE.domain.values:
-                for optimizer in HP_OPTIMIZER.domain.values:
-                    hparams = {
-                        HP_BACKBONE: backbone,
-                        HP_TRAIN_ROIS_PER_IMAGE: train_rois_per_image,
-                        HP_DETECTION_MIN_CONFIDENCE: detection_min_confidence,
-                        HP_OPTIMIZER: optimizer
-                    }
-                    run_name = "run-%d" % session_num
-                    print('--- Starting trial: %s' % run_name)
-                    print({h.name: hparams[h] for h in hparams})
-                    run_dir = log_dir + run_name
-                    run(hparams, data_dir=data_dir, log_dir=run_dir, run_name=run_name, epochs=epochs)
-                    session_num += 1
+        # for train_rois_per_image in HP_TRAIN_ROIS_PER_IMAGE.domain.values:
+        for detection_min_confidence in HP_DETECTION_MIN_CONFIDENCE.domain.values:
+            for optimizer in HP_OPTIMIZER.domain.values:
+                hparams = {
+                    HP_BACKBONE: backbone,
+                    # HP_TRAIN_ROIS_PER_IMAGE: train_rois_per_image,
+                    HP_DETECTION_MIN_CONFIDENCE: detection_min_confidence,
+                    HP_OPTIMIZER: optimizer
+                }
+                run_name = "run-%d" % session_num
+                print('--- Starting trial: %s' % run_name)
+                print({h.name: hparams[h] for h in hparams})
+                run_dir = log_dir + run_name
+                run(hparams, data_dir=data_dir, log_dir=run_dir, run_name=run_name, epochs=epochs)
+                session_num += 1
 
 
 if __name__ == "__main__":
