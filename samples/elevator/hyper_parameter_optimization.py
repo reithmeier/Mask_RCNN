@@ -39,7 +39,7 @@ with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
 def inference_calculation(config, model_dir, model_path, dataset_val):
     model = modellib.MaskRCNN(mode="inference",
                               config=config,
-                              model_dir=model_dir)
+                              model_dir=model_dir, unique_log_name=False)
     model.load_weights(model_path, by_name=True)
 
     mean_average_precision, f1_score = calc_mean_average_precision(dataset_val=dataset_val, inference_config=config,
@@ -101,7 +101,7 @@ def train_test_model(hparams, data_dir, log_dir, run_name):
     config.IMAGES_PER_GPU = batch_size
 
     model = modellib.MaskRCNN(mode="training", config=config,
-                              model_dir=log_dir)
+                              model_dir=log_dir, unique_log_name=False)
     augmentation = iaa.Sequential([
         iaa.Fliplr(0.5)
     ])
@@ -122,8 +122,8 @@ def train_test_model(hparams, data_dir, log_dir, run_name):
     return map, f1s
 
 
-def run(run_dir, hparams, data_dir, log_dir, run_name):
-    with tf.summary.create_file_writer(run_dir).as_default():
+def run(hparams, data_dir, log_dir, run_name):
+    with tf.summary.create_file_writer(log_dir).as_default():
         hp.hparams(hparams)  # record the values used in this trial
         map, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name)
         tf.summary.scalar(METRIC_MAP, map, step=1)
@@ -144,7 +144,8 @@ def main(data_dir, log_dir):
                 run_name = "run-%d" % session_num
                 print('--- Starting trial: %s' % run_name)
                 print({h.name: hparams[h] for h in hparams})
-                run('logs/hparam_tuning/' + run_name, hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name)
+                run_dir = log_dir + run_name
+                run(hparams, data_dir=data_dir, log_dir=run_dir, run_name=run_name)
                 session_num += 1
 
 

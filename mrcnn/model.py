@@ -1956,7 +1956,7 @@ class MaskRCNN():
     The actual Keras model is in the keras_model property.
     """
 
-    def __init__(self, mode, config, model_dir):
+    def __init__(self, mode, config, model_dir, unique_log_name=True):
         """
         mode: Either "training" or "inference"
         config: A Sub-class of the Config class
@@ -1966,7 +1966,7 @@ class MaskRCNN():
         self.mode = mode
         self.config = config
         self.model_dir = model_dir
-        self.set_log_dir()
+        self.set_log_dir(unique_log_name=unique_log_name)
         self.keras_model = self.build(mode=mode, config=config)
 
     def build(self, mode, config):
@@ -2269,7 +2269,7 @@ class MaskRCNN():
             f.close()
 
         # Update the log directory
-        self.set_log_dir(filepath)
+        self.set_log_dir(filepath, True)
 
     def get_imagenet_weights(self):
         """Downloads ImageNet trained weights from Keras.
@@ -2372,7 +2372,7 @@ class MaskRCNN():
                 log("{}{:20}   ({})".format(" " * indent, layer.name,
                                             layer.__class__.__name__))
 
-    def set_log_dir(self, model_path=None):
+    def set_log_dir(self, model_path=None, unique_log_name=True):
         """Sets the model log directory and epoch counter.
 
         model_path: If None, or a format different from what this code uses
@@ -2401,8 +2401,11 @@ class MaskRCNN():
                 print('Re-starting from epoch %d' % self.epoch)
 
         # Directory for training logs
-        self.log_dir = os.path.join(self.model_dir, "{}{:%Y%m%dT%H%M}".format(
-            self.config.NAME.lower(), now))
+        if unique_log_name:
+            self.log_dir = os.path.join(self.model_dir, "{}{:%Y%m%dT%H%M}".format(
+                self.config.NAME.lower(), now))
+        else:
+            self.log_dir = self.model_dir
 
         # Path to save after each epoch. Include placeholders that get filled by Keras.
         self.checkpoint_path = os.path.join(self.log_dir, "mask_rcnn_{}_*epoch*.h5".format(
