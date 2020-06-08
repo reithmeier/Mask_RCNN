@@ -32,7 +32,8 @@ METRIC_F1S = 'f1 score'
 with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
     hp.hparams_config(
         hparams=[HP_BACKBONE, HP_TRAIN_ROIS_PER_IMAGE, HP_DETECTION_MIN_CONFIDENCE, HP_OPTIMIZER],
-        metrics=[]
+        metrics=[hp.Metric(METRIC_MAP, display_name='mean average precision'),
+                 hp.Metric(METRIC_F1S, display_name='f1 score')]
     )
 
 
