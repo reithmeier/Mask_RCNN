@@ -17,23 +17,35 @@ import mrcnn.model as modellib
 from mrcnn import utils
 
 import tensorflow as tf
-from tensorboard.plugins.hparams import api as hp
+from tensorboard.plugins.hparams import api as tbhp
+
+from hyperopt import hp
+from hyperopt import fmin, tpe, space_eval
+
+from collections import OrderedDict
 
 # hyper parameters
 
-HP_BACKBONE = hp.HParam('backbone', hp.Discrete(["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]))
-# HP_TRAIN_ROIS_PER_IMAGE = hp.HParam('train_rois_per_image', hp.Discrete([50, 100, 200]))
-HP_DETECTION_MIN_CONFIDENCE = hp.HParam('detection_min_confidence', hp.Discrete([0.6, 0.7, 0.8]))
-HP_OPTIMIZER = hp.HParam('optimizer', hp.Discrete(['ADAM', 'SGD']))
+HP_BACKBONE = tbhp.HParam('backbone', tbhp.Discrete(["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]))
+HP_TRAIN_ROIS_PER_IMAGE = tbhp.HParam('train_rois_per_image', tbhp.Discrete([50, 100, 200]))
+HP_DETECTION_MIN_CONFIDENCE = tbhp.HParam('detection_min_confidence', tbhp.Discrete([0.6, 0.7, 0.8]))
+HP_OPTIMIZER = tbhp.HParam('optimizer', tbhp.Discrete(['ADAM', 'SGD']))
+
+space = OrderedDict([
+    ('backbone', hp.choice('backbone', ["resnet50_batch_size_choice", "resnet50_batch_size2", "resnet101"])),
+    ('train_rois_per_image', hp.choice('train_rois_per_image_choice', [50, 100, 200])),
+    ('detection_min_confidence', hp.choice('dmc', [0.6, 0.7, 0.8])),
+    ('optimizer', hp.choice('detection_min_confidence_choice', ['ADAM', 'SGD']))
+])
 
 METRIC_MAP = 'mean average precision'
 METRIC_F1S = 'f1 score'
 
 with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
-    hp.hparams_config(
-        hparams=[HP_BACKBONE, HP_DETECTION_MIN_CONFIDENCE, HP_OPTIMIZER],  # HP_TRAIN_ROIS_PER_IMAGE,
-        metrics=[hp.Metric(METRIC_MAP, display_name='mean average precision'),
-                 hp.Metric(METRIC_F1S, display_name='f1 score')]
+    tbhp.hparams_config(
+        hparams=[HP_BACKBONE, HP_DETECTION_MIN_CONFIDENCE, HP_TRAIN_ROIS_PER_IMAGE, HP_OPTIMIZER],
+        metrics=[tbhp.Metric(METRIC_MAP, display_name='mean average precision'),
+                 tbhp.Metric(METRIC_F1S, display_name='f1 score')]
     )
 
 
@@ -53,7 +65,7 @@ def inference_calculation(config, model_dir, model_path, dataset_val):
 def calc_mean_average_precision(dataset_val, inference_config, model):
     # Compute VOC-Style mAP @ IoU=0.5
     # Running on 10 images. Increase for better accuracy.
-    image_ids = np.random.choice(dataset_val.image_ids, 100)
+    image_ids = np.random.choice(dataset_val.image_ids, 1000)
     APs = []
     F1s = []
     for image_id in image_ids:
@@ -103,7 +115,7 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     config.OPTIMIZER = hparams[HP_OPTIMIZER]
     if config.OPTIMIZER == "ADAM":
         config.LEARNING_RATE = config.LEARNING_RATE / 10
-    config.VALIDATION_STEPS = 1000  # bigger val steps
+    # config.VALIDATION_STEPS = 1000  # bigger val steps
 
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=log_dir, unique_log_name=False)
@@ -111,7 +123,7 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
         iaa.Fliplr(0.5)
     ])
 
-    custom_callbacks = [hp.KerasCallback(log_dir, hparams)]
+    custom_callbacks = [tbhp.KerasCallback(log_dir, hparams)]
 
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
@@ -129,25 +141,57 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
 def run(hparams, data_dir, log_dir, run_name, epochs):
     with tf.summary.create_file_writer(log_dir).as_default():
-        hp.hparams(hparams)  # record the values used in this trial
+        tbhp.hparams(hparams)  # record the values used in this trial
         m_ap, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name, epochs=epochs)
         tf.summary.scalar(METRIC_MAP, m_ap, step=1)
         tf.summary.scalar(METRIC_F1S, f1s, step=1)
+        return m_ap
 
 
-def main(data_dir, log_dir, epochs):
+class TPESearch:
+    def __init__(self, data_dir, log_dir, epochs):
+        self.data_dir = data_dir
+        self.log_dir = log_dir
+        self.epochs = epochs
+        self.session_cnt = 0
+
+    def objective(self, params):
+        hparams = {
+            HP_BACKBONE: params['backbone'],
+            HP_TRAIN_ROIS_PER_IMAGE: params['train_rois_per_image'],
+            HP_DETECTION_MIN_CONFIDENCE: params['detection_min_confidence'],
+            HP_OPTIMIZER: params['optimizer']
+        }
+        run_name = "run-%d" % self.session_cnt
+        print('--- Starting trial: %s' % run_name)
+        print({h.name: hparams[h] for h in hparams})
+        run_dir = self.log_dir + run_name
+        m_ap = run(hparams, data_dir=self.data_dir, log_dir=run_dir, run_name=run_name, epochs=self.epochs)
+        self.session_cnt += 1
+        return -m_ap  # value will be minimized -> inversion needed
+
+    def run(self):
+        best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10)
+        print(best)
+        print(space_eval(space, best))
+
+
+def grid_search(data_dir, log_dir, epochs):
     session_num = 0
 
     for backbone in HP_BACKBONE.domain.values:
         # for train_rois_per_image in HP_TRAIN_ROIS_PER_IMAGE.domain.values:
         for detection_min_confidence in HP_DETECTION_MIN_CONFIDENCE.domain.values:
             for optimizer in HP_OPTIMIZER.domain.values:
+                print(backbone)
+
                 hparams = {
                     HP_BACKBONE: backbone,
                     # HP_TRAIN_ROIS_PER_IMAGE: train_rois_per_image,
                     HP_DETECTION_MIN_CONFIDENCE: detection_min_confidence,
                     HP_OPTIMIZER: optimizer
                 }
+                print(hparams)
                 run_name = "run-%d" % session_num
                 print('--- Starting trial: %s' % run_name)
                 print({h.name: hparams[h] for h in hparams})
@@ -167,4 +211,4 @@ if __name__ == "__main__":
                         default=1)
     args = parser.parse_args()
 
-    main(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
+    grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
