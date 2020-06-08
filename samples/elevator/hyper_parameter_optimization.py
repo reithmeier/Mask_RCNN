@@ -32,10 +32,10 @@ HP_DETECTION_MIN_CONFIDENCE = tbhp.HParam('detection_min_confidence', tbhp.Discr
 HP_OPTIMIZER = tbhp.HParam('optimizer', tbhp.Discrete(['ADAM', 'SGD']))
 
 space = OrderedDict([
-    ('backbone', hp.choice('backbone', ["resnet50_batch_size_choice", "resnet50_batch_size2", "resnet101"])),
-    ('train_rois_per_image', hp.choice('train_rois_per_image_choice', [50, 100, 200])),
+    ('backbone', hp.choice('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"])),
+    ('train_rois_per_image', hp.choice('train_rois_per_image', [50, 100, 200])),
     ('detection_min_confidence', hp.choice('dmc', [0.6, 0.7, 0.8])),
-    ('optimizer', hp.choice('detection_min_confidence_choice', ['ADAM', 'SGD']))
+    ('optimizer', hp.choice('detection_min_confidence', ['ADAM', 'SGD']))
 ])
 
 METRIC_MAP = 'mean average precision'
