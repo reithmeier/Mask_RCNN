@@ -134,6 +134,10 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
+
+    # inference calculation
+    config.BATCH_SIZE = 1
+    config.IMAGES_PER_GPU = 1
     m_ap, f1s = inference_calculation(config=config, model_path=model_path, model_dir=log_dir, dataset_val=dataset_val)
 
     return m_ap, f1s
