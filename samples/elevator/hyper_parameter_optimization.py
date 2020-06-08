@@ -2,6 +2,7 @@ import argparse
 import os
 import sys
 
+import gc
 import imgaug.augmenters as iaa
 import numpy as np
 
@@ -19,8 +20,10 @@ from mrcnn import utils
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as tbhp
 
-from hyperopt import hp
+from hyperopt import hp, Trials
 from hyperopt import fmin, tpe, space_eval
+
+import joblib
 
 from collections import OrderedDict
 
@@ -134,12 +137,13 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
+    gc.collect()  # tensorflow does not clean up memory correctly https://github.com/tensorflow/tensorflow/issues/14181
 
     # inference calculation
     config.BATCH_SIZE = 1
     config.IMAGES_PER_GPU = 1
     m_ap, f1s = inference_calculation(config=config, model_path=model_path, model_dir=log_dir, dataset_val=dataset_val)
-
+    gc.collect()
     return m_ap, f1s
 
 
@@ -175,9 +179,11 @@ class TPESearch:
         return -m_ap  # value will be minimized -> inversion needed
 
     def run(self):
-        best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10)
+        trials = Trials()
+        best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10, trials=trials)
         print(best)
         print(space_eval(space, best))
+        joblib.dump(trials, self.log_dir + 'artifacts/hyperopt_trials.pkl')
 
 
 def grid_search(data_dir, log_dir, epochs):
