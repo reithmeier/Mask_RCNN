@@ -36,46 +36,6 @@ with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
     )
 
 
-def inference_calculation(config, model_dir, model_path, dataset_val):
-    model = modellib.MaskRCNN(mode="inference",
-                              config=config,
-                              model_dir=model_dir, unique_log_name=False)
-    model.load_weights(model_path, by_name=True)
-
-    mean_average_precision, f1_score = calc_mean_average_precision(dataset_val=dataset_val, inference_config=config,
-                                                                   model=model)
-    print("mAP: ", mean_average_precision)
-    print("F1s: ", f1_score)
-    return mean_average_precision, f1_score
-
-
-def calc_mean_average_precision(dataset_val, inference_config, model):
-    # Compute VOC-Style mAP @ IoU=0.5
-    # Running on 10 images. Increase for better accuracy.
-    image_ids = np.random.choice(dataset_val.image_ids, 100)
-    APs = []
-    F1s = []
-    for image_id in image_ids:
-        # Load image and ground truth data
-        image, image_meta, gt_class_id, gt_bbox, gt_mask = \
-            modellib.load_image_gt(dataset_val, inference_config,
-                                   image_id, use_mini_mask=False)
-        molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
-        # Run object detection
-        results = model.detect([image], verbose=0)
-        r = results[0]
-        # Compute AP
-        AP, precisions, recalls, overlaps = \
-            utils.compute_ap(gt_bbox, gt_class_id, gt_mask,
-                             r["rois"], r["class_ids"], r["scores"], r['masks'])
-        precision = np.mean(precisions)
-        recall = np.mean(recalls)
-        F1_instance = 2 * (precision * recall) / (precision + recall)
-        APs.append(AP)
-        F1s.append(F1_instance)
-    return np.mean(APs), np.mean(F1s)
-
-
 def train_test_model(hparams, data_dir, log_dir, run_name):
     config = SunRGBDConfig()
     dataset_train = SunRGBDDataset()
@@ -117,17 +77,12 @@ def train_test_model(hparams, data_dir, log_dir, run_name):
 
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
-    map, f1s = inference_calculation(config=config, model_path=model_path, model_dir=log_dir, dataset_val=dataset_val)
-
-    return map, f1s
 
 
 def run(hparams, data_dir, log_dir, run_name):
     with tf.summary.create_file_writer(log_dir).as_default():
         hp.hparams(hparams)  # record the values used in this trial
-        map, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name)
-        tf.summary.scalar(METRIC_MAP, map, step=1)
-        tf.summary.scalar(METRIC_F1S, f1s, step=1)
+        train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name)
 
 
 def main(data_dir, log_dir):
