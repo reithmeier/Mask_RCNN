@@ -14,3 +14,4 @@ IPython[all]
 pillow
 pyrealsense2
 hyperopt
+joblib

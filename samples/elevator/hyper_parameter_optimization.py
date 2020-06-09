@@ -2,7 +2,6 @@ import argparse
 import os
 import sys
 
-import gc
 import imgaug.augmenters as iaa
 import numpy as np
 
@@ -19,6 +18,8 @@ from mrcnn import utils
 
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as tbhp
+
+import multiprocessing
 
 from hyperopt import hp, Trials
 from hyperopt import fmin, tpe, space_eval
@@ -102,24 +103,23 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     dataset_val.prepare()
 
     # Create model in training mode
-    if hparams[HP_BACKBONE] == "resnet50_batch_size1":
+    if hparams['HP_BACKBONE'] == "resnet50_batch_size1":
         backbone = "resnet50"
         batch_size = 1
-    elif hparams[HP_BACKBONE] == "resnet50_batch_size2":
+    elif hparams['HP_BACKBONE'] == "resnet50_batch_size2":
         backbone = "resnet50"
         batch_size = 2
     else:
         backbone = "resnet101"
         batch_size = 1
-
     config.BACKBONE = backbone
     config.BATCH_SIZE = batch_size
     config.IMAGES_PER_GPU = batch_size
-    config.OPTIMIZER = hparams[HP_OPTIMIZER]
+    config.OPTIMIZER = hparams['HP_OPTIMIZER']
     if config.OPTIMIZER == "ADAM":
         config.LEARNING_RATE = config.LEARNING_RATE / 10
     # config.VALIDATION_STEPS = 1000  # bigger val steps
-
+    # config.STEPS_PER_EPOCH = 1
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=log_dir, unique_log_name=False)
     augmentation = iaa.Sequential([
@@ -137,22 +137,25 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
-    gc.collect()  # tensorflow does not clean up memory correctly https://github.com/tensorflow/tensorflow/issues/14181
 
     # inference calculation
     config.BATCH_SIZE = 1
     config.IMAGES_PER_GPU = 1
     m_ap, f1s = inference_calculation(config=config, model_path=model_path, model_dir=log_dir, dataset_val=dataset_val)
-    gc.collect()
+
     return m_ap, f1s
 
 
-def run(hparams, data_dir, log_dir, run_name, epochs):
+def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
     with tf.summary.create_file_writer(log_dir).as_default():
         tbhp.hparams(hparams)  # record the values used in this trial
         m_ap, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name, epochs=epochs)
+
         tf.summary.scalar(METRIC_MAP, m_ap, step=1)
         tf.summary.scalar(METRIC_F1S, f1s, step=1)
+        return_dict['m_ap'] = m_ap
+        return_dict['f1s'] = f1s
+
         return m_ap
 
 
@@ -165,16 +168,27 @@ class TPESearch:
 
     def objective(self, params):
         hparams = {
-            HP_BACKBONE: params['backbone'],
-            HP_TRAIN_ROIS_PER_IMAGE: params['train_rois_per_image'],
-            HP_DETECTION_MIN_CONFIDENCE: params['detection_min_confidence'],
-            HP_OPTIMIZER: params['optimizer']
+            'HP_BACKBONE': params['backbone'],
+            'HP_TRAIN_ROIS_PER_IMAGE': params['train_rois_per_image'],
+            'HP_DETECTION_MIN_CONFIDENCE': params['detection_min_confidence'],
+            'HP_OPTIMIZER': params['optimizer']
         }
         run_name = "run-%d" % self.session_cnt
         print('--- Starting trial: %s' % run_name)
-        print({h.name: hparams[h] for h in hparams})
+        print({h: hparams[h] for h in hparams})
         run_dir = self.log_dir + run_name
-        m_ap = run(hparams, data_dir=self.data_dir, log_dir=run_dir, run_name=run_name, epochs=self.epochs)
+
+        # run iterative calculations in separate processes
+        # because of an known tensorflow bug
+        # that prevents gpu ram to be freed correctly
+        manager = multiprocessing.Manager()
+        return_dict = manager.dict()
+        process_run = multiprocessing.Process(target=run, args=(
+            hparams, self.data_dir, run_dir, run_name, self.epochs, return_dict))
+        process_run.start()
+        process_run.join()
+        m_ap = return_dict['m_ap']
+
         self.session_cnt += 1
         return -m_ap  # value will be minimized -> inversion needed
 
@@ -183,7 +197,7 @@ class TPESearch:
         best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10, trials=trials)
         print(best)
         print(space_eval(space, best))
-        joblib.dump(trials, self.log_dir + 'artifacts/hyperopt_trials.pkl')
+        joblib.dump(trials, self.log_dir + 'hyperopt_trials.pkl')
 
 
 def grid_search(data_dir, log_dir, epochs):
@@ -193,8 +207,6 @@ def grid_search(data_dir, log_dir, epochs):
         # for train_rois_per_image in HP_TRAIN_ROIS_PER_IMAGE.domain.values:
         for detection_min_confidence in HP_DETECTION_MIN_CONFIDENCE.domain.values:
             for optimizer in HP_OPTIMIZER.domain.values:
-                print(backbone)
-
                 hparams = {
                     HP_BACKBONE: backbone,
                     # HP_TRAIN_ROIS_PER_IMAGE: train_rois_per_image,
@@ -216,9 +228,12 @@ if __name__ == "__main__":
                         default=os.path.abspath(
                             "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
-                        default=ROOT_DIR + "/logs/")
+                        default=ROOT_DIR + "/logs/hparam_tuning/")
     parser.add_argument("-e", "--epochs", type=int, help="number of epochs to train with each configuration",
                         default=1)
     args = parser.parse_args()
 
-    grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
+    tpe_search = TPESearch(data_dir=args.data_dir, log_dir=args.model_dir, epochs=1)
+    tpe_search.run()
+
+    # grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
