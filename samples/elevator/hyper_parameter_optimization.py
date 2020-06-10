@@ -155,7 +155,7 @@ def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
         tf.summary.scalar(METRIC_F1S, f1s, step=1)
         return_dict['m_ap'] = m_ap
         return_dict['f1s'] = f1s
-
+        print("remote process finished")
         return m_ap
 
 
@@ -188,9 +188,10 @@ class TPESearch:
         process_run.start()
         process_run.join()
         m_ap = return_dict['m_ap']
-
+        f1s = return_dict['f1s']
+        print("run-"+str(self.session_cnt)+" finished")
         self.session_cnt += 1
-        return -m_ap  # value will be minimized -> inversion needed
+        return -f1s  # value will be minimized -> inversion needed
 
     def run(self):
         trials = Trials()
