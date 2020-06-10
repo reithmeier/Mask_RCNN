@@ -38,8 +38,8 @@ HP_OPTIMIZER = tbhp.HParam('optimizer', tbhp.Discrete(['ADAM', 'SGD']))
 space = OrderedDict([
     ('backbone', hp.choice('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"])),
     ('train_rois_per_image', hp.choice('train_rois_per_image', [50, 100, 200])),
-    ('detection_min_confidence', hp.choice('dmc', [0.6, 0.7, 0.8])),
-    ('optimizer', hp.choice('detection_min_confidence', ['ADAM', 'SGD']))
+    ('detection_min_confidence', hp.choice('detection_min_confidence', [0.6, 0.7, 0.8])),
+    ('optimizer', hp.choice('optimizer', ['ADAM', 'SGD']))
 ])
 
 METRIC_MAP = 'mean average precision'
@@ -94,6 +94,8 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
 
 
 def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
+    print("train_test_model started")
+
     config = SunRGBDConfig()
     dataset_train = SunRGBDDataset()
     dataset_train.load_sun_rgbd(data_dir, "train13")
@@ -118,8 +120,9 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     config.OPTIMIZER = hparams['HP_OPTIMIZER']
     if config.OPTIMIZER == "ADAM":
         config.LEARNING_RATE = config.LEARNING_RATE / 10
-    # config.VALIDATION_STEPS = 1000  # bigger val steps
+    config.VALIDATION_STEPS = 1000  # bigger val steps
     # config.STEPS_PER_EPOCH = 1
+
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=log_dir, unique_log_name=False)
     augmentation = iaa.Sequential([
@@ -128,6 +131,7 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
     custom_callbacks = [tbhp.KerasCallback(log_dir, hparams)]
 
+    print("start training")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
                 epochs=epochs,
@@ -135,18 +139,22 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
                 augmentation=augmentation,
                 custom_callbacks=custom_callbacks)
 
+    print("save model")
     model_path = log_dir + run_name + ".h5"
     model.keras_model.save_weights(model_path)
 
     # inference calculation
+    print("calculate inference")
     config.BATCH_SIZE = 1
     config.IMAGES_PER_GPU = 1
     m_ap, f1s = inference_calculation(config=config, model_path=model_path, model_dir=log_dir, dataset_val=dataset_val)
 
+    print("train_test_model finished")
     return m_ap, f1s
 
 
 def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
+    print("remote process started")
     with tf.summary.create_file_writer(log_dir).as_default():
         tbhp.hparams(hparams)  # record the values used in this trial
         m_ap, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name, epochs=epochs)
@@ -167,6 +175,7 @@ class TPESearch:
         self.session_cnt = 0
 
     def objective(self, params):
+        print("objective-"+str(self.session_cnt)+" started")
         hparams = {
             'HP_BACKBONE': params['backbone'],
             'HP_TRAIN_ROIS_PER_IMAGE': params['train_rois_per_image'],
@@ -189,13 +198,14 @@ class TPESearch:
         process_run.join()
         m_ap = return_dict['m_ap']
         f1s = return_dict['f1s']
-        print("run-"+str(self.session_cnt)+" finished")
+        print("objective-"+str(self.session_cnt)+" finished")
         self.session_cnt += 1
         return -f1s  # value will be minimized -> inversion needed
 
     def run(self):
         trials = Trials()
         best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10, trials=trials)
+
         print(best)
         print(space_eval(space, best))
         joblib.dump(trials, self.log_dir + 'hyperopt_trials.pkl')
