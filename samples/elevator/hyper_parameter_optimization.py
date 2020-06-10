@@ -120,8 +120,8 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     config.OPTIMIZER = hparams['HP_OPTIMIZER']
     if config.OPTIMIZER == "ADAM":
         config.LEARNING_RATE = config.LEARNING_RATE / 10
-    config.VALIDATION_STEPS = 1000  # bigger val steps
-    # config.STEPS_PER_EPOCH = 1
+    # config.VALIDATION_STEPS = 1000  # bigger val steps
+    # config.STEPS_PER_EPOCH = 10
 
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=log_dir, unique_log_name=False)
@@ -155,6 +155,10 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
 
 def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
     print("remote process started")
+    print("data_dir=" + str(data_dir))
+    print("log_dir=" + str(log_dir))
+    print("run_name=" + str(run_name))
+    print("epochs=" + str(epochs))
     with tf.summary.create_file_writer(log_dir).as_default():
         tbhp.hparams(hparams)  # record the values used in this trial
         m_ap, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name, epochs=epochs)
@@ -175,7 +179,6 @@ class TPESearch:
         self.session_cnt = 0
 
     def objective(self, params):
-        print("objective-"+str(self.session_cnt)+" started")
         hparams = {
             'HP_BACKBONE': params['backbone'],
             'HP_TRAIN_ROIS_PER_IMAGE': params['train_rois_per_image'],
@@ -196,19 +199,22 @@ class TPESearch:
             hparams, self.data_dir, run_dir, run_name, self.epochs, return_dict))
         process_run.start()
         process_run.join()
+
         m_ap = return_dict['m_ap']
         f1s = return_dict['f1s']
-        print("objective-"+str(self.session_cnt)+" finished")
+        print("mAP: ", m_ap)
+        print("F1s: ", f1s)
+        print('--- Finished trial: %s' % run_name)
         self.session_cnt += 1
         return -f1s  # value will be minimized -> inversion needed
 
     def run(self):
         trials = Trials()
-        best = fmin(self.objective, space, algo=tpe.suggest, max_evals=10, trials=trials)
-
-        print(best)
-        print(space_eval(space, best))
-        joblib.dump(trials, self.log_dir + 'hyperopt_trials.pkl')
+        for i in range(0, 10):
+            best = fmin(self.objective, space, algo=tpe.suggest, max_evals=i + 1, trials=trials)
+            print(best)
+            print(space_eval(space, best))
+            joblib.dump(trials, self.log_dir + 'hyperopt_trials_' + str(i) + '.pkl')
 
 
 def grid_search(data_dir, log_dir, epochs):
@@ -244,7 +250,7 @@ if __name__ == "__main__":
                         default=1)
     args = parser.parse_args()
 
-    tpe_search = TPESearch(data_dir=args.data_dir, log_dir=args.model_dir, epochs=1)
+    tpe_search = TPESearch(data_dir=args.data_dir, log_dir=args.model_dir, epochs=100)
     tpe_search.run()
 
     # grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
