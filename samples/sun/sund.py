@@ -7,7 +7,7 @@ uses depth data only
 
 import os
 import sys
-import cv2
+
 import numpy as np
 import skimage.draw
 
@@ -80,12 +80,16 @@ class SunDDataset(utils.Dataset):
             lbl_image_path = os.path.join(dataset_dir, lbl_image)
             dpt_image_path = dpt_image_path.strip()
             lbl_image_path = lbl_image_path.strip()
+            msk_full_path = lbl_image_path + ".mask.npy"
+            cls_full_path = lbl_image_path + ".class_ids.npy"
 
             self.add_image(
                 "sund",
                 image_id=dpt_image_path,  # use file name as a unique image id
                 path=dpt_image_path,
-                lbl_image_path=lbl_image_path)
+                lbl_image_path=lbl_image_path,
+                msk_full_path=msk_full_path,
+                cls_full_path=cls_full_path)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -106,42 +110,9 @@ class SunDDataset(utils.Dataset):
         image_info = self.image_info[image_id]
         if image_info["source"] != "sund":
             return super(self.__class__, self).load_mask(image_id)
-
-        # Convert polygons to a bitmap mask of shape
-        # [height, width, instance_count]
-        info = self.image_info[image_id]
-        lbl_image_path = info["lbl_image_path"]
-        lbl_image = cv2.imread(lbl_image_path, cv2.IMREAD_UNCHANGED)
-
-        height, width = lbl_image.shape[:2]
-
-        mask_found = []
-        class_ids = []
-
-        # 13 different classes
-        for cls in range(1, 13):
-            class_mask = (lbl_image == cls).astype(np.uint8)
-
-            # no instances of cls is present
-            if cv2.countNonZero(class_mask) == 0:
-                continue
-
-            class_contours, _ = cv2.findContours(class_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            for i in range(0, len(class_contours)):
-                contour_mask = np.zeros([height, width], dtype=np.uint8)
-                cv2.drawContours(contour_mask, class_contours, i, cls, cv2.FILLED)
-                mask_found.append(contour_mask)
-                class_ids.append(cls)
-
-        # contours found per instance differs from contours found in the label image
-        # since the label image consists of numbers of 0-13 in a range of 0-255
-        # therefore openCV does not find contours that well
-        mask = np.zeros([height, width, len(mask_found)], dtype=np.uint8)
-        for i in range(0, len(mask_found)):
-            mask[:, :, i] = mask_found[i]
-
-        cv2.waitKey(0)
-        return mask, np.array(class_ids)
+        masks = np.load(image_info["msk_full_path"])
+        class_ids = np.load(image_info["cls_full_path"])
+        return masks, class_ids
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,4] Numpy array.

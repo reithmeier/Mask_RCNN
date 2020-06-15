@@ -86,9 +86,11 @@ def compute_backbone_shapes(config, image_shape):
           int(math.ceil(image_shape[1] / stride))]
          for stride in config.BACKBONE_STRIDES])
 
+
 ############################################################
 #  Fusenet Graph
 ############################################################
+
 
 def fusenet_graph(input_image, dropout_rate):
     """

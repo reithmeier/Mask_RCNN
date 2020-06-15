@@ -154,8 +154,7 @@ class ElevatorRGBDataset(utils.Dataset):
         mask = np.load(image_info["msk_full_path"])
         class_ids = np.load(image_info["cls_full_path"])
         return mask, class_ids
-        # return create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
-        # class_name_to_id=self.class_name_to_id)
+
 
 
 def run_training():

@@ -11,8 +11,6 @@ import sys
 import numpy as np
 import skimage.draw
 
-from . import util
-
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
 
@@ -86,12 +84,15 @@ class ElevatorD3Dataset(utils.Dataset):
             lbl_full_path = os.path.join(dataset_dir, lbl_file)
             dpt_full_path = dpt_full_path.strip()
             lbl_full_path = lbl_full_path.strip()
-
+            msk_full_path = lbl_full_path + ".mask.npy"
+            cls_full_path = lbl_full_path + ".class_ids.npy"
             self.add_image(
                 "elevator_d3",
                 image_id=dpt_file,  # use file name as a unique image id
                 path=dpt_full_path,
-                lbl_full_path=lbl_full_path)
+                lbl_full_path=lbl_full_path,
+                msk_full_path=msk_full_path,
+                cls_full_path=cls_full_path)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -113,8 +114,9 @@ class ElevatorD3Dataset(utils.Dataset):
         if image_info["source"] != "elevator_d3":
             return super(self.__class__, self).load_mask(image_id)
 
-        return util.create_mask(lbl_full_path=self.image_info[image_id]["lbl_full_path"],
-                                class_name_to_id=self.class_name_to_id)
+        mask = np.load(image_info["msk_full_path"])
+        class_ids = np.load(image_info["cls_full_path"])
+        return mask, class_ids
 
     def load_image(self, image_id):
         """Load the specified image and return a [H,W,3] Numpy array.
