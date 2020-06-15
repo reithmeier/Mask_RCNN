@@ -48,7 +48,7 @@ class Config(object):
     VALIDATION_STEPS = 50
 
     # Backbone network architecture
-    # Supported values are: resnet50, resnet101.
+    # Supported values are: resnet50, resnet101, fusenet.
     # You can also provide a callable that should have the signature
     # of model.resnet_graph. If you do so, you need to supply a callable
     # to COMPUTE_BACKBONE_SHAPE as well
@@ -213,6 +213,9 @@ class Config(object):
     # if true, backbone has 2 parallel branches, 1 for rgb image and 1 for depth image
     # otherwise the default backbone is used
     PARALLEL_BACKBONE = False
+
+    # dropout for FuseNet backbone architecture
+    DROPOUT_RATE = 0.3
 
     OPTIMIZER = "SGD"
 

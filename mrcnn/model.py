@@ -80,11 +80,159 @@ def compute_backbone_shapes(config, image_shape):
         return config.COMPUTE_BACKBONE_SHAPE(image_shape)
 
     # Currently supports ResNet only
-    assert config.BACKBONE in ["resnet50", "resnet101"]
+    assert config.BACKBONE in ["resnet50", "resnet101", "fusenet"]
     return np.array(
         [[int(math.ceil(image_shape[0] / stride)),
           int(math.ceil(image_shape[1] / stride))]
          for stride in config.BACKBONE_STRIDES])
+
+############################################################
+#  Fusenet Graph
+############################################################
+
+def fusenet_graph(input_image, dropout_rate):
+    """
+    Build a FuseNet Graph
+    :param dropout_rate: dropout rate
+    :param input_image:
+    :return: FuseNet Graph
+    """
+    x_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
+    x_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
+
+    x_rgb, x_dpt = fusenet_stage_1(x_rgb=x_rgb, x_dpt=x_dpt)
+    C1 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_2(x_rgb=x_rgb, x_dpt=x_dpt)
+    C2 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_3(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    C3 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_4(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    C4 = x_rgb
+    x_rgb = fusenet_stage_5(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    C5 = x_rgb
+
+    return C1, C2, C3, C4, C5
+
+
+def fusenet_stage_1(x_rgb, x_dpt):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr2", branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr2", branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="1", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="1", block="pool", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="1", block="pool", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_2(x_rgb, x_dpt):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr2", branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr2", branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="2", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="2", block="pool", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="2", block="pool", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_3(x_rgb, x_dpt, dropout_rate):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="3", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="3", block="dropout", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="dpt")
+    x_dpt = dropout_block(x_dpt, dropout_rate=dropout_rate, stage="3", block="dropout", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_4(x_rgb, x_dpt, dropout_rate):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr3", branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr3", branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="4", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="4", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="4", block="dropout", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="4", block="pool", branch="dpt")
+    x_dpt = dropout_block(x_dpt, dropout_rate=dropout_rate, stage="4", block="dropout", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_5(x_rgb, x_dpt, dropout_rate):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr3", branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr3", branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="5", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="5", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="5", block="dropout", branch="rgb")
+
+    return x_rgb
+
+
+def fusion_block(a, b, stage, block, branch):
+    add_name = 'add' + str(stage) + block + '_branch' + branch
+    activation_name = 'relu' + str(stage) + block + '_branch' + branch
+    x = KL.Add(name=add_name)([a, b])
+    x = KL.Activation('relu', name=activation_name)(x)
+    return x
+
+
+def dropout_block(input_tensor, dropout_rate, stage, block, branch):
+    dropout_name = 'drop' + str(stage) + block + '_branch' + branch
+    x = KL.Dropout(dropout_rate, name=dropout_name)(input_tensor)
+    return x
+
+
+def pool_block(input_tensor, kernel_size, strides, stage, block, branch):
+    pool_name = 'pl' + str(stage) + block + '_branch' + branch
+    x = KL.MaxPooling2D((kernel_size, kernel_size), strides=strides, padding="same", name=pool_name)(input_tensor)
+    return x
+
+
+def cbr_block(input_tensor, kernel_size, filters, stage, block, branch,
+              strides=(2, 2), use_bias=True, train_bn=True):
+    conv_name = 'conv' + str(stage) + block + '_branch' + branch
+    bn_name = 'bn' + str(stage) + block + '_branch' + branch
+    act_name = 'relu' + str(stage) + block + '_branch' + branch
+    x = KL.Conv2D(filters, (kernel_size, kernel_size), strides=strides, padding='same',
+                  name=conv_name, use_bias=use_bias)(input_tensor)
+    x = BatchNorm(name=bn_name)(x, training=train_bn)
+    x = KL.Activation('relu', name=act_name)(x)
+    return x
 
 
 ############################################################
@@ -170,7 +318,7 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     return x
 
 
-def fusion(a, b):
+def fusion_layer(a, b):
     """
     fusion similar to fusenet
     :param a: branch a to fuse
@@ -198,21 +346,6 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
         # assert input_image.dims == 4 and input_image.shape[3] == 4  # assert RGB-D input
         input_image_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
         input_image_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
-
-        """
-        C1_RGB, C2_RGB, C3_RGB, C4_RGB, C5_RGB = resnet_graph(input_image=input_image_rgb,
-                                                              architecture=architecture,
-                                                              stage5=stage5, train_bn=train_bn, postfix="_rgb")
-
-        C1_D, C2_D, C3_D, C4_D, C5_D = resnet_graph(input_image=input_image_dpt, architecture=architecture,
-                                                    stage5=stage5, train_bn=train_bn, postfix="_dpt")
-
-        return fusion(C1_RGB, C1_D), \
-               fusion(C2_RGB, C2_D), \
-               fusion(C3_RGB, C3_D), \
-               fusion(C4_RGB, C4_D), \
-               fusion(C5_RGB, C5_D)
-        """
 
         return resnet_graph_parallel(input_image_rgb=input_image_rgb, input_image_dpt=input_image_dpt,
                                      architecture=architecture, stage5=stage5, train_bn=train_bn)
@@ -273,28 +406,28 @@ def resnet_graph_parallel(input_image_rgb, input_image_dpt, architecture, stage5
     # Stage 1 RGB
     C1_rgb = resnet_stage_1(input_image=input_image_rgb, postfix="rgb", train_bn=train_bn)
     C1_dpt = resnet_stage_1(input_image=input_image_dpt, postfix="dpt", train_bn=train_bn)
-    C1 = fusion(C1_rgb, C1_dpt)
+    C1 = fusion_layer(C1_rgb, C1_dpt)
 
     # Stage 2
     C2_rgb = resnet_stage_2(input_layer=C1, postfix="rgb", train_bn=train_bn)
     C2_dpt = resnet_stage_2(input_layer=C1_dpt, postfix="dpt", train_bn=train_bn)
-    C2 = fusion(C2_rgb, C2_dpt)
+    C2 = fusion_layer(C2_rgb, C2_dpt)
 
     # Stage 3
     C3_rgb = resnet_stage_3(input_layer=C2, postfix="rgb", train_bn=train_bn)
     C3_dpt = resnet_stage_3(input_layer=C2_dpt, postfix="dpt", train_bn=train_bn)
-    C3 = fusion(C3_rgb, C3_dpt)
+    C3 = fusion_layer(C3_rgb, C3_dpt)
 
     # Stage 4
     C4_rgb = resnet_stage_4(input_layer=C3, postfix="rgb", train_bn=train_bn, architecture=architecture)
     C4_dpt = resnet_stage_4(input_layer=C3_dpt, postfix="dpt", train_bn=train_bn, architecture=architecture)
-    C4 = fusion(C4_rgb, C4_dpt)
+    C4 = fusion_layer(C4_rgb, C4_dpt)
 
     # Stage 5
     if stage5:
         C5_rgb = resnet_stage_5(input_layer=C4, postfix="rgb", train_bn=train_bn)
         C5_dpt = resnet_stage_5(input_layer=C4_dpt, postfix="dpt", train_bn=train_bn)
-        C5 = fusion(C5_rgb, C5_dpt)
+        C5 = fusion_layer(C5_rgb, C5_dpt)
     else:
         C5 = None
     return [C1, C2, C3, C4, C5]
@@ -417,6 +550,7 @@ class ProposalLayer(KE.Layer):
         # Improve performance by trimming to top anchors by score
         # and doing the rest on the smaller subset.
         pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])
+
         ix = tf.nn.top_k(scores, pre_nms_limit, sorted=True,
                          name="top_anchors").indices
         scores = utils.batch_slice([scores, ix], lambda x, y: tf.gather(x, y),
@@ -2030,10 +2164,12 @@ class MaskRCNN():
             _, C2, C3, C4, C5 = config.BACKBONE(input_image, stage5=True,
                                                 train_bn=config.TRAIN_BN)
         else:
-            _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
-                                                      stage5=True, train_bn=config.TRAIN_BN,
-                                                      parallel=config.PARALLEL_BACKBONE)
-
+            if config.BACKBONE == 'fusenet':
+                _, C2, C3, C4, C5 = fusenet_graph(input_image=input_image, dropout_rate=config.DROPOUT_RATE)
+            else:
+                _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
+                                                          stage5=True, train_bn=config.TRAIN_BN,
+                                                          parallel=config.PARALLEL_BACKBONE)
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
         P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
