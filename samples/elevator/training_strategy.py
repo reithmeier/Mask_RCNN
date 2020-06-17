@@ -10,6 +10,7 @@ from samples.sun.sund3 import SunD3Config, SunD3Dataset
 from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
 from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
+from samples.sun.sunrgbd_fusenet import SunRGBDFusenetConfig, SunRGBDFusenetDataset
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -24,6 +25,7 @@ from samples.elevator.elevator_d3 import ElevatorD3Config, ElevatorD3Dataset
 from samples.elevator.elevator_rgb import ElevatorRGBConfig, ElevatorRGBDataset
 from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDataset
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
+from samples.elevator.elevator_rgbd_fusenet import ElevatorRGBDFusenetConfig, ElevatorRGBDFusenetDataset
 
 
 def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, train_layers, load_model, model_name,
@@ -190,6 +192,14 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
             dataset_val = ElevatorRGBDParallelDataset()
             dataset_val.load_elevator_rgbd_parallel(data_dir, "validation")
             dataset_val.prepare()
+        elif strategy == "RGBDFusenet":
+            config = ElevatorRGBDFusenetConfig()
+            dataset_train = ElevatorRGBDFusenetDataset()
+            dataset_train.load_elevator_rgbd_fusenet(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorRGBDFusenetDataset()
+            dataset_val.load_elevator_rgbd_fusenet(data_dir, "validation")
+            dataset_val.prepare()
         else:
             config = ElevatorRGBConfig()
             dataset_train = ElevatorRGBDataset()
@@ -222,6 +232,14 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
             dataset_train.prepare()
             dataset_val = SunRGBDParallelDataset()
             dataset_val.load_sun_rgbd_parallel(data_dir, "split/val13")
+            dataset_val.prepare()
+        elif strategy == "RGBDFusenet":
+            config = SunRGBDFusenetConfig()
+            dataset_train = SunRGBDFusenetDataset()
+            dataset_train.load_sun_rgbd_fusenet(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunRGBDFusenetDataset()
+            dataset_val.load_sun_rgbd_fusenet(data_dir, "split/val13")
             dataset_val.prepare()
         else:
             config = SunRGBConfig()
@@ -256,10 +274,11 @@ if __name__ == "__main__":
                             "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/")
-    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel]", default="RGBDParallel")
+    parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
+                        default="RGBDFusenet")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
          load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all",
-         backbone="resnet50", batch_size=2)
+         backbone="resnet101", batch_size=1)
