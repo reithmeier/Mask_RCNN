@@ -126,6 +126,8 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
 
 
 def inference_calculation(config, model_dir, model_path, dataset_val):
+    config.BATCH_SIZE = 1
+    config.IMAGES_PER_GPU = 1
     model = modellib.MaskRCNN(mode="inference",
                               config=config,
                               model_dir=model_dir)
