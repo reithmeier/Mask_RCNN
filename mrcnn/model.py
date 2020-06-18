@@ -92,38 +92,47 @@ def compute_backbone_shapes(config, image_shape):
 ############################################################
 
 
-def fusenet_graph(input_image, dropout_rate):
+def fusenet_graph(input_image, dropout_rate, n_filters, kernel_sizes):
     """
     Build a FuseNet Graph
     :param dropout_rate: dropout rate
     :param input_image:
+    :param n_filters: array with number of filters per layer
+    :param kernel_sizes: array with kernel size per layer
     :return: FuseNet Graph
     """
     x_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
     x_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
 
-    x_rgb, x_dpt = fusenet_stage_1(x_rgb=x_rgb, x_dpt=x_dpt)
+    x_rgb, x_dpt = fusenet_stage_1(x_rgb=x_rgb, x_dpt=x_dpt, n_filters=n_filters[0], kernel_size=kernel_sizes[0])
     C1 = x_rgb
-    x_rgb, x_dpt = fusenet_stage_2(x_rgb=x_rgb, x_dpt=x_dpt)
+    x_rgb, x_dpt = fusenet_stage_2(x_rgb=x_rgb, x_dpt=x_dpt, n_filters=n_filters[1], kernel_size=kernel_sizes[1])
     C2 = x_rgb
-    x_rgb, x_dpt = fusenet_stage_3(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    x_rgb, x_dpt = fusenet_stage_3(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[2],
+                                   kernel_size=kernel_sizes[2])
     C3 = x_rgb
-    x_rgb, x_dpt = fusenet_stage_4(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    x_rgb, x_dpt = fusenet_stage_4(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[3],
+                                   kernel_size=kernel_sizes[3])
     C4 = x_rgb
-    x_rgb = fusenet_stage_5(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate)
+    x_rgb = fusenet_stage_5(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[4],
+                            kernel_size=kernel_sizes[4])
     C5 = x_rgb
 
     return C1, C2, C3, C4, C5
 
 
-def fusenet_stage_1(x_rgb, x_dpt):
+def fusenet_stage_1(x_rgb, x_dpt, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr2",
+                      branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=7, strides=(1, 1), stage="1", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr2",
+                      branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="1", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="1", block="pool", branch="rgb")
 
@@ -132,14 +141,18 @@ def fusenet_stage_1(x_rgb, x_dpt):
     return x_rgb, x_dpt
 
 
-def fusenet_stage_2(x_rgb, x_dpt):
+def fusenet_stage_2(x_rgb, x_dpt, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr2",
+                      branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=64, kernel_size=3, strides=(1, 1), stage="2", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr2",
+                      branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="2", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="2", block="pool", branch="rgb")
 
@@ -148,16 +161,16 @@ def fusenet_stage_2(x_rgb, x_dpt):
     return x_rgb, x_dpt
 
 
-def fusenet_stage_3(x_rgb, x_dpt, dropout_rate):
+def fusenet_stage_3(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=128, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr1", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr2", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=3, strides=(1, 1), stage="3", block="cbr3", branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="3", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="rgb")
     x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="3", block="dropout", branch="rgb")
@@ -168,16 +181,22 @@ def fusenet_stage_3(x_rgb, x_dpt, dropout_rate):
     return x_rgb, x_dpt
 
 
-def fusenet_stage_4(x_rgb, x_dpt, dropout_rate):
+def fusenet_stage_4(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr2", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr3", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr3",
+                      branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr2", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=256, kernel_size=3, strides=(1, 1), stage="4", block="cbr3", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr3",
+                      branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="4", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="4", block="pool", branch="rgb")
     x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="4", block="dropout", branch="rgb")
@@ -188,16 +207,22 @@ def fusenet_stage_4(x_rgb, x_dpt, dropout_rate):
     return x_rgb, x_dpt
 
 
-def fusenet_stage_5(x_rgb, x_dpt, dropout_rate):
+def fusenet_stage_5(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr2", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr3", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr3",
+                      branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr2", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=512, kernel_size=3, strides=(1, 1), stage="5", block="cbr3", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr3",
+                      branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="5", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="5", block="pool", branch="rgb")
     x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="5", block="dropout", branch="rgb")
@@ -2167,7 +2192,8 @@ class MaskRCNN():
                                                 train_bn=config.TRAIN_BN)
         else:
             if config.BACKBONE == 'fusenet':
-                _, C2, C3, C4, C5 = fusenet_graph(input_image=input_image, dropout_rate=config.DROPOUT_RATE)
+                _, C2, C3, C4, C5 = fusenet_graph(input_image=input_image, dropout_rate=config.DROPOUT_RATE,
+                                                  n_filters=config.NUM_FILTERS, kernel_sizes=config.KERNEL_SIZE)
             else:
                 _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
                                                           stage5=True, train_bn=config.TRAIN_BN,

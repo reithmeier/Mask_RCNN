@@ -217,6 +217,14 @@ class Config(object):
     # dropout for FuseNet backbone architecture
     DROPOUT_RATE = 0.3
 
+    # number of filters in each stage of the FuseNet backbone
+    NUM_FILTERS = [64, 64, 128, 256, 512]
+
+    # size of kernel in each stage of the FuseNet backbone
+    KERNEL_SIZE = [7, 3, 3, 3, 3]
+
+    # optimizer used
+    #   supported values [SGD, ADAM]
     OPTIMIZER = "SGD"
 
     def __init__(self):
