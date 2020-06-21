@@ -52,9 +52,9 @@ def main():
 
             i += 1
 
-    with open("./measurements.txt") as out_file:
+    with open("./measurements.txt", 'w') as out_file:
         out_file.write(str(time_measurements))
-    with open("./calculations.txt") as out_file:
+    with open("./calculations.txt", 'w') as out_file:
         out_file.write("standard deviation: " + str(np.std(time_measurements)))
         out_file.write("mean: " + str(np.mean(time_measurements)))
         out_file.write("median: " + str(np.median(time_measurements)))

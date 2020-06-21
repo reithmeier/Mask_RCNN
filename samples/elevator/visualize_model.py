@@ -1,16 +1,16 @@
 import argparse
 import os
 import sys
-
 import cv2
 import numpy as np
 import tensorflow as tf
-from tf_explain.core import GradCAM
+# from tf_explain.core import GradCAM
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
 from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
 from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
+from samples.sun.sunrgbd_fusenet import SunRGBDFusenetConfig, SunRGBDFusenetDataset
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -25,9 +25,11 @@ from samples.elevator.elevator_d3 import ElevatorD3Config, ElevatorD3Dataset
 from samples.elevator.elevator_rgb import ElevatorRGBConfig, ElevatorRGBDataset
 from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDataset
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
-import matplotlib.pyplot as plt
+from samples.elevator.elevator_rgbd_fusenet import ElevatorRGBDFusenetConfig, ElevatorRGBDFusenetDataset
 
+# import matplotlib.pyplot as plt
 
+"""
 def visualize_grad_cam(config, model_dir, model_path, dataset_val):
     explainer = GradCAM()
 
@@ -69,7 +71,7 @@ def visualize_grad_cam(config, model_dir, model_path, dataset_val):
         plt.imshow(grid)
 
         print("done")
-
+"""
 
 def visualize_filters(config, model_dir, model_path, dataset_val):
     model = modellib.MaskRCNN(mode="inference",
@@ -79,16 +81,40 @@ def visualize_filters(config, model_dir, model_path, dataset_val):
     print(model.keras_model.summary())
 
     for layer in model.keras_model.layers:
-        if not ((('res' in layer.name) and ('branch' in layer.name) and layer.name[-1] == 'b')
-                or 'conv1' == layer.name):
-            continue
+        print(layer.name)
+        print(layer.input_shape)
+        print(layer.output_shape)
 
+        if 'conv' not in layer.name:
+           continue
+
+        # if not ((('res' in layer.name) and ('branch' in layer.name) and layer.name[-1] == 'b')
+        #         or 'conv1' == layer.name):
+        #     continue
+
+        print(layer.name)
+        print(layer)
         filters, biases = layer.get_weights()
-
-        f_min, f_max = filters.min(), filters.max()
+        print(filters.shape)
+        f_min, f_max = np.amin(filters), np.amax(filters)
+        print(f_min, f_max)
+        """
+        f_min = np.full((7, 7, 3), sys.float_info.max)
+        f_max = np.full((7, 7, 3), sys.float_info.min)
+        for i in range(filters.shape[3]):
+            f = filters[:, :, :, i]
+            print(f)
+            if f_min > f:
+                f_min = f
+            if f_max < f:
+                f_max = f
+        print(f_min, f_max)
+        """
         filters = (filters - f_min) / (f_max - f_min)
         # plot first few filters
-        n_filters, num_channels, ix = min(filters.shape[3], 5), min(filters.shape[2], 5), 1
+        n_filters, n_channels, ix = min(filters.shape[3], 5), min(filters.shape[2], 5), 1
+        print(n_filters, n_channels, ix)
+        """
         fig = plt.figure()
 
         for i in range(n_filters):
@@ -97,9 +123,10 @@ def visualize_filters(config, model_dir, model_path, dataset_val):
 
             # plot each channel separately
 
-            for channel in range(num_channels):
+            for channel in range(n_channels):
                 # specify subplot and turn of axis
-                ax = fig.add_subplot(n_filters, num_channels, ix)
+
+                ax = fig.add_subplot(n_filters, n_channels, ix)
                 ax.set_xticks([])
                 ax.set_yticks([])
 
@@ -112,7 +139,7 @@ def visualize_filters(config, model_dir, model_path, dataset_val):
         fig.suptitle(layer.name)
 
         plt.show()
-
+        """
 
 def visualize_activations(config, model_dir, model_path, dataset_val):
     model = modellib.MaskRCNN(mode="inference",
@@ -192,6 +219,14 @@ def main(data_set, strategy, data_dir, model_dir, model_name, backbone):
             dataset_val = ElevatorRGBDParallelDataset()
             dataset_val.load_elevator_rgbd_parallel(data_dir, "validation")
             dataset_val.prepare()
+        elif strategy == "RGBDFusenet":
+            config = ElevatorRGBDFusenetConfig()
+            dataset_train = ElevatorRGBDFusenetDataset()
+            dataset_train.load_elevator_rgbd_fusenet(data_dir, "train")
+            dataset_train.prepare()
+            dataset_val = ElevatorRGBDFusenetDataset()
+            dataset_val.load_elevator_rgbd_fusenet(data_dir, "validation")
+            dataset_val.prepare()
         else:
             config = ElevatorRGBConfig()
             dataset_train = ElevatorRGBDataset()
@@ -225,6 +260,14 @@ def main(data_set, strategy, data_dir, model_dir, model_name, backbone):
             dataset_val = SunRGBDParallelDataset()
             dataset_val.load_sun_rgbd_parallel(data_dir, "split/val13")
             dataset_val.prepare()
+        elif strategy == "RGBDFusenet":
+            config = SunRGBDFusenetConfig()
+            dataset_train = SunRGBDFusenetDataset()
+            dataset_train.load_sun_rgbd_fusenet(data_dir, "train13")
+            dataset_train.prepare()
+            dataset_val = SunRGBDFusenetDataset()
+            dataset_val.load_sun_rgbd_fusenet(data_dir, "split/val13")
+            dataset_val.prepare()
         else:
             config = SunRGBConfig()
             dataset_train = SunRGBDataset()
@@ -247,14 +290,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\\Users\\p41929\\_Master Thesis\\Mask_RCNN\\datasets\\elevator\\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                            "D:\Masterarbeit\Mask_RCNN\datasets\sun_rgbd\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
-                        default="RGB")
-    parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="ELEVATOR")
+                        default="RGBDFusenet")
+    parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir,
-         model_name=args.model_dir + "elevator_rgb20200525T1054\mask_rcnn_elevator_rgb_0001.h5",
-         backbone="resnet101")
+         model_name=args.model_dir + "mask_rcnn_sunrgbd_fusenet_0001.h5",
+         backbone="fusenet")
