@@ -1,23 +1,17 @@
+from collections import OrderedDict
+
 import joblib
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-from hyperopt.plotting import main_plot_histogram, main_plot_history, main_plot_vars
+from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
 
-ADAM = 'ADAM'
-SGD = 'SGD'
-resnet50_batch_size2 = "resnet50\nbatch size = 2"
-resnet50_batch_size1 = "resnet50\nbatch size = 1"
-resnet101 = "resnet101"
-
-sun_rbg_results = {
-    'detection_min_confidence': [0.7, 0.6, 0.7, 0.7, 0.6, 0.8, 0.6, 0.7],
-    'optimizer': [ADAM, ADAM, ADAM, ADAM, ADAM, ADAM, SGD, SGD],
-    'train_rois_per_image': [50, 200, 100, 200, 50, 100, 200, 50],
-    'backbone': [resnet50_batch_size2, resnet50_batch_size1, resnet50_batch_size2, resnet50_batch_size1,
-                 resnet50_batch_size1, resnet50_batch_size1, resnet101, resnet101],
-    'f1score': [0.32434, 0.29214, 0.32956, 0.30526, 0.29998, 0.30383, 0.29369, 0.29637]
-}
+space = OrderedDict([
+    ('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]),
+    ('train_rois_per_image', [50, 100, 200]),
+    ('detection_min_confidence', [0.6, 0.7, 0.8]),
+    ('optimizer', ['ADAM', 'SGD'])
+])
 
 
 def scatter_plot(data_x, data_y, x_label, y_label):
@@ -35,14 +29,14 @@ def scatter_plot(data_x, data_y, x_label, y_label):
     plt.show()
 
 
-def plot_sun_rgb_results():
-    scatter_plot(sun_rbg_results['detection_min_confidence'], sun_rbg_results['f1score'], 'detection min confidence',
+def plot_sun_rgb_results(result):
+    scatter_plot(result['detection_min_confidence'], result['f1score'], 'detection min confidence',
                  'f1 score')
-    scatter_plot(sun_rbg_results['optimizer'], sun_rbg_results['f1score'], 'optimizer',
+    scatter_plot(result['optimizer'], result['f1score'], 'optimizer',
                  'f1 score')
-    scatter_plot(sun_rbg_results['backbone'], sun_rbg_results['f1score'], 'detection min confidence',
+    scatter_plot(result['backbone'], result['f1score'], 'backbone',
                  'f1 score')
-    scatter_plot(sun_rbg_results['train_rois_per_image'], sun_rbg_results['f1score'], 'detection min confidence',
+    scatter_plot(result['train_rois_per_image'], result['f1score'], 'train_rois_per_image',
                  'f1 score')
 
 
@@ -52,6 +46,20 @@ def plot_hyperopt():
     main_plot_histogram(trials=trials)
     main_plot_vars(trials=trials)
 
+    # parse trials object
+    result = {'f1score': []}
+    i = 0
+    for configuration in trials.miscs:
+        for hyperparam in configuration['vals']:
+            idx = configuration['vals'][hyperparam][0]
+            if hyperparam not in result:
+                result[hyperparam] = []
+            result[hyperparam].append(space[hyperparam][idx])
+        result['f1score'].append(-1 * trials.results[i]['loss'])
+        i += 1
+    print(result)
+    # plot results
+    plot_sun_rgb_results(result)
 
-plot_sun_rgb_results()
+
 plot_hyperopt()
