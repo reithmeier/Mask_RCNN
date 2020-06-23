@@ -22,7 +22,7 @@ from hyperopt import hp, Trials
 from tensorboard.plugins.hparams import api as tbhp
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("../../")
+ROOT_DIR = os.path.abspath("../")
 
 # Import Mask RCNN
 sys.path.append('.')

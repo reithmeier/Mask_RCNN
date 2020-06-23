@@ -23,7 +23,7 @@ from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelD
 from samples.sun.sunrgbd_fusenet import SunRGBDFusenetConfig, SunRGBDFusenetDataset
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("../../")
+ROOT_DIR = os.path.abspath("../")
 
 # Import Mask RCNN
 sys.path.append('.')
@@ -47,22 +47,7 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
     if load_model:
         model.keras_model.load_weights(model_dir + model_name)
         model.epoch = init_epoch
-    """
-        iaa.Sometimes(0.5, iaa.CropAndPad(
-            percent=(-0.05, 0.1),
-            pad_mode=ia.ALL,
-            pad_cval=(0, 255)
-        )),
-        iaa.Sometimes(0.5, iaa.Affine(
-            scale={"x": (0.9, 1.1), "y": (0.9, 1.1)},
-            translate_percent={"x": (-0.1, 0.1), "y": (-0.1, 0.1)},
-            rotate=(-30, 30),
-            shear=(-8, 8),
-            order=[0, 1],
-            cval=(0, 255),
-            mode=ia.ALL
-        )),
-    """
+
     if augment:
         augmentation = iaa.Sequential([
             iaa.Fliplr(0.5)
@@ -293,4 +278,4 @@ if __name__ == "__main__":
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
          load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all",
-         backbone="resnet101", batch_size=1)
+         backbone="fusenet", batch_size=1)

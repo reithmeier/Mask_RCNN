@@ -48,7 +48,7 @@ def scatter_plot(data_x, data_y, x_label, y_label):
     plt.show()
 
 
-def plot_sun_rgb_results(result):
+def plot_results(result):
     """
     plot results of a sun rgb hyperparameter optimization
     :param result: results to be plotter
@@ -86,7 +86,7 @@ def plot_hyperopt(trials_file):
         i += 1
     print(result)
     # plot results
-    plot_sun_rgb_results(result)
+    plot_results(result)
 
 
 plot_hyperopt('C:\\Users\\p41929\\_Master Thesis\\Mask_RCNN\\logs\\hyperopt_trials_9.pkl')
