@@ -1,11 +1,25 @@
+# **********************************************************************************************************************
+#
+# brief:    script to perform hyper parameter optimization
+#
+# author:   Lukas Reithmeier
+# date:     02.06.2020
+#
+# **********************************************************************************************************************
+
 import argparse
+import multiprocessing
 import os
 import sys
+from collections import OrderedDict
 
 import imgaug.augmenters as iaa
+import joblib
 import numpy as np
-
-from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
+import tensorflow as tf
+from hyperopt import fmin, tpe, space_eval
+from hyperopt import hp, Trials
+from tensorboard.plugins.hparams import api as tbhp
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -15,33 +29,23 @@ sys.path.append('.')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 import mrcnn.model as modellib
 from mrcnn import utils
+from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 
-import tensorflow as tf
-from tensorboard.plugins.hparams import api as tbhp
-
-import multiprocessing
-
-from hyperopt import hp, Trials
-from hyperopt import fmin, tpe, space_eval
-
-import joblib
-
-from collections import OrderedDict
-
-# hyper parameters
-
+# hyper parameters for tensorboard
 HP_BACKBONE = tbhp.HParam('backbone', tbhp.Discrete(["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]))
 HP_TRAIN_ROIS_PER_IMAGE = tbhp.HParam('train_rois_per_image', tbhp.Discrete([50, 100, 200]))
 HP_DETECTION_MIN_CONFIDENCE = tbhp.HParam('detection_min_confidence', tbhp.Discrete([0.6, 0.7, 0.8]))
 HP_OPTIMIZER = tbhp.HParam('optimizer', tbhp.Discrete(['ADAM', 'SGD']))
 
-space = OrderedDict([
+# hyperparameters hyperopt
+search_space = OrderedDict([
     ('backbone', hp.choice('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"])),
     ('train_rois_per_image', hp.choice('train_rois_per_image', [50, 100, 200])),
     ('detection_min_confidence', hp.choice('detection_min_confidence', [0.6, 0.7, 0.8])),
     ('optimizer', hp.choice('optimizer', ['ADAM', 'SGD']))
 ])
 
+# metrics for tensorboard
 METRIC_MAP = 'mean average precision'
 METRIC_F1S = 'f1 score'
 
@@ -54,19 +58,34 @@ with tf.summary.create_file_writer('logs/hparam_tuning').as_default():
 
 
 def inference_calculation(config, model_dir, model_path, dataset_val):
+    """
+    calculate mean average precision and f1 score with the inference model
+    :param config: inference config
+    :param model_dir: directory to log the model
+    :param model_path: path of weights file
+    :param dataset_val: validation data set
+    :return: mean average precision, f1 score
+    """
     model = modellib.MaskRCNN(mode="inference",
                               config=config,
                               model_dir=model_dir, unique_log_name=False)
     model.load_weights(model_path, by_name=True)
 
-    mean_average_precision, f1_score = calc_mean_average_precision(dataset_val=dataset_val, inference_config=config,
-                                                                   model=model)
+    mean_average_precision, f1_score = evaluate(dataset_val=dataset_val, inference_config=config,
+                                                model=model)
     print("mAP: ", mean_average_precision)
     print("F1s: ", f1_score)
     return mean_average_precision, f1_score
 
 
-def calc_mean_average_precision(dataset_val, inference_config, model):
+def evaluate(dataset_val, inference_config, model):
+    """
+    calculate the mean average precision and the f1 score of a model
+    :param dataset_val: validation data
+    :param inference_config: inference configuration
+    :param model: model
+    :return: mean average precision, the f1 score
+    """
     # Compute VOC-Style mAP @ IoU=0.5
     # Running on 10 images. Increase for better accuracy.
     image_ids = np.random.choice(dataset_val.image_ids, 1000)
@@ -93,7 +112,17 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
     return np.mean(APs), np.mean(F1s)
 
 
-def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
+def evaluate_hyperparameters(hparams, data_dir, log_dir, run_name, epochs):
+    """
+    train the model with chosen hyperparameters
+
+    :param hparams: hyperparameters
+    :param data_dir: directory of train and validation data
+    :param log_dir: directory to log model to
+    :param run_name: identifier of the specific run
+    :param epochs: number of training epochs
+    :return: mean average precision, f1 score
+    """
     print("train_test_model started")
 
     config = SunRGBDConfig()
@@ -120,8 +149,6 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     config.OPTIMIZER = hparams['HP_OPTIMIZER']
     if config.OPTIMIZER == "ADAM":
         config.LEARNING_RATE = config.LEARNING_RATE / 10
-    # config.VALIDATION_STEPS = 1000  # bigger val steps
-    # config.STEPS_PER_EPOCH = 10
 
     model = modellib.MaskRCNN(mode="training", config=config,
                               model_dir=log_dir, unique_log_name=False)
@@ -153,7 +180,18 @@ def train_test_model(hparams, data_dir, log_dir, run_name, epochs):
     return m_ap, f1s
 
 
-def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
+def run_hyperparameter_evaluation(hparams, data_dir, log_dir, run_name, epochs, return_dict):
+    """
+    write summary and evaluate hyper parameters
+    this function should be run in a separate process
+    :param hparams: hyperparameters
+    :param data_dir: directory of train and validation data
+    :param log_dir: directory to log model to
+    :param run_name: identifier of the specific run
+    :param epochs: number of training epochs
+    :param return_dict: dictionary to return result to parent process
+    :return: mean average precision
+    """
     print("remote process started")
     print("data_dir=" + str(data_dir))
     print("log_dir=" + str(log_dir))
@@ -161,7 +199,8 @@ def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
     print("epochs=" + str(epochs))
     with tf.summary.create_file_writer(log_dir).as_default():
         tbhp.hparams(hparams)  # record the values used in this trial
-        m_ap, f1s = train_test_model(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name, epochs=epochs)
+        m_ap, f1s = evaluate_hyperparameters(hparams, data_dir=data_dir, log_dir=log_dir, run_name=run_name,
+                                             epochs=epochs)
 
         tf.summary.scalar(METRIC_MAP, m_ap, step=1)
         tf.summary.scalar(METRIC_F1S, f1s, step=1)
@@ -172,6 +211,10 @@ def run(hparams, data_dir, log_dir, run_name, epochs, return_dict):
 
 
 class TPESearch:
+    """
+    wraps the search using tree-structured parzen estimators
+    """
+
     def __init__(self, data_dir, log_dir, epochs):
         self.data_dir = data_dir
         self.log_dir = log_dir
@@ -179,6 +222,13 @@ class TPESearch:
         self.session_cnt = 0
 
     def objective(self, params):
+        """
+        start the evaluation of the hyperparameters in a different process
+        this has to be done due to tensorflow specific issues,
+        where GPU memory is only freed correctly when the process terminates
+        :param params: parameters
+        :return: negative f1 score
+        """
         hparams = {
             'HP_BACKBONE': params['backbone'],
             'HP_TRAIN_ROIS_PER_IMAGE': params['train_rois_per_image'],
@@ -195,7 +245,7 @@ class TPESearch:
         # that prevents gpu ram to be freed correctly
         manager = multiprocessing.Manager()
         return_dict = manager.dict()
-        process_run = multiprocessing.Process(target=run, args=(
+        process_run = multiprocessing.Process(target=run_hyperparameter_evaluation, args=(
             hparams, self.data_dir, run_dir, run_name, self.epochs, return_dict))
         process_run.start()
         process_run.join()
@@ -209,41 +259,23 @@ class TPESearch:
         return -f1s  # value will be minimized -> inversion needed
 
     def run(self):
+        """
+        start the TPE search
+        dumps tpe search result in a pkl file
+        """
         trials = Trials()
         for i in range(0, 10):
-            best = fmin(self.objective, space, algo=tpe.suggest, max_evals=i + 1, trials=trials)
+            best = fmin(self.objective, search_space, algo=tpe.suggest, max_evals=i + 1, trials=trials)
             print(best)
-            print(space_eval(space, best))
+            print(space_eval(search_space, best))
             joblib.dump(trials, self.log_dir + 'hyperopt_trials_' + str(i) + '.pkl')
-
-
-def grid_search(data_dir, log_dir, epochs):
-    session_num = 0
-
-    for backbone in HP_BACKBONE.domain.values:
-        # for train_rois_per_image in HP_TRAIN_ROIS_PER_IMAGE.domain.values:
-        for detection_min_confidence in HP_DETECTION_MIN_CONFIDENCE.domain.values:
-            for optimizer in HP_OPTIMIZER.domain.values:
-                hparams = {
-                    HP_BACKBONE: backbone,
-                    # HP_TRAIN_ROIS_PER_IMAGE: train_rois_per_image,
-                    HP_DETECTION_MIN_CONFIDENCE: detection_min_confidence,
-                    HP_OPTIMIZER: optimizer
-                }
-                print(hparams)
-                run_name = "run-%d" % session_num
-                print('--- Starting trial: %s' % run_name)
-                print({h.name: hparams[h] for h in hparams})
-                run_dir = log_dir + run_name
-                run(hparams, data_dir=data_dir, log_dir=run_dir, run_name=run_name, epochs=epochs)
-                session_num += 1
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/hparam_tuning/")
     parser.add_argument("-e", "--epochs", type=int, help="number of epochs to train with each configuration",
@@ -252,5 +284,3 @@ if __name__ == "__main__":
 
     tpe_search = TPESearch(data_dir=args.data_dir, log_dir=args.model_dir, epochs=100)
     tpe_search.run()
-
-    # grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
