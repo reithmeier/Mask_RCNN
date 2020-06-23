@@ -1,7 +1,12 @@
-"""
-Mask R-CNN
-Configurations and data loading code for the sun rgbd dataset.
-"""
+# **********************************************************************************************************************
+#
+# brief:    Mask R-CNN
+#           Configurations and data loading code for the sun rgbd dataset.
+#
+# author:   Lukas Reithmeier
+# date:     19.04.2020
+#
+# **********************************************************************************************************************
 
 import os
 import sys

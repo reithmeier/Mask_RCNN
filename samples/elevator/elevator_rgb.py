@@ -1,7 +1,12 @@
-"""
-Mask R-CNN
-Configurations and data loading code for the elevator dataset.
-"""
+# **********************************************************************************************************************
+#
+# brief:    Mask R-CNN
+#           Configurations and data loading code for the elevator dataset.
+#
+# author:   Lukas Reithmeier
+# date:     22.04.2020
+#
+# **********************************************************************************************************************
 
 import argparse
 import copy

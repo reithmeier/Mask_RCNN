@@ -1,10 +1,15 @@
-"""
-Mask R-CNN
-Configurations and data loading code for the elevator dataset.
-uses rgbd data
-backbone is a fusenet
-@see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
-"""
+# **********************************************************************************************************************
+#
+# brief:    Mask R-CNN
+#           Configurations and data loading code for the elevator dataset.
+#           uses rgbd data
+#           see: https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
+#           uses a fusenet as backbone network
+#
+# author:   Lukas Reithmeier
+# date:     15.06.2020
+#
+# **********************************************************************************************************************
 
 import os
 import sys

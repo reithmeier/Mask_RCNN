@@ -1,10 +1,15 @@
-"""
-Mask R-CNN
-Configurations and data loading code for the sun rgbd dataset.
-uses rgbd data
-@see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
-backbone of the Mask R-CNN has 2 parallel branches, 1 for RGB data and 1 for D data
-"""
+# **********************************************************************************************************************
+#
+# brief:    Mask R-CNN
+#           Configurations and data loading code for the sun rgbd dataset.
+#           uses rgbd data
+#           see: https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
+#           backbone of the Mask R-CNN has 2 parallel branches, 1 for RGB data and 1 for D data
+#
+# author:   Lukas Reithmeier
+# date:     18.05.2020
+#
+# **********************************************************************************************************************
 
 import os
 import sys

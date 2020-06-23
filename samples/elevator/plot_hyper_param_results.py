@@ -1,3 +1,12 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the hyper parameter optimization results
+#
+# author:   Lukas Reithmeier
+# date:     22.06.2020
+#
+# **********************************************************************************************************************
+
 from collections import OrderedDict
 
 import joblib
@@ -6,6 +15,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
 
+
+# search space
 space = OrderedDict([
     ('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]),
     ('train_rois_per_image', [50, 100, 200]),
@@ -15,6 +26,14 @@ space = OrderedDict([
 
 
 def scatter_plot(data_x, data_y, x_label, y_label):
+    """
+    print a scatter plot
+    :param data_x: data in x direction
+    :param data_y: data in y direction
+    :param x_label: label of x axis
+    :param y_label: label of y axis
+    :return:
+    """
     font = {'family': 'arial',
             'size': 16}
 
@@ -30,18 +49,26 @@ def scatter_plot(data_x, data_y, x_label, y_label):
 
 
 def plot_sun_rgb_results(result):
+    """
+    plot results of a sun rgb hyperparameter optimization
+    :param result: results to be plotter
+    """
     scatter_plot(result['detection_min_confidence'], result['f1score'], 'detection min confidence',
                  'f1 score')
     scatter_plot(result['optimizer'], result['f1score'], 'optimizer',
                  'f1 score')
     scatter_plot(result['backbone'], result['f1score'], 'backbone',
                  'f1 score')
-    scatter_plot(result['train_rois_per_image'], result['f1score'], 'train_rois_per_image',
+    scatter_plot(result['train_rois_per_image'], result['f1score'], 'train rois per image',
                  'f1 score')
 
 
-def plot_hyperopt():
-    trials = joblib.load('C:\\Users\\p41929\\_Master Thesis\\Mask_RCNN\\logs\\hyperopt_trials_9.pkl')
+def plot_hyperopt(trials_file):
+    """
+    load trials file and plot all results
+    :param trials_file: path of the trials.pkl file
+    """
+    trials = joblib.load(trials_file)
     main_plot_history(trials=trials)
     main_plot_histogram(trials=trials)
     main_plot_vars(trials=trials)
@@ -62,4 +89,4 @@ def plot_hyperopt():
     plot_sun_rgb_results(result)
 
 
-plot_hyperopt()
+plot_hyperopt('C:\\Users\\p41929\\_Master Thesis\\Mask_RCNN\\logs\\hyperopt_trials_9.pkl')

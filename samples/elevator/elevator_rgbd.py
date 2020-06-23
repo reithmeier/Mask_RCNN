@@ -1,9 +1,14 @@
-"""
-Mask R-CNN
-Configurations and data loading code for the elevator dataset.
-uses rgbd data
-@see https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
-"""
+# **********************************************************************************************************************
+#
+# brief:    Mask R-CNN
+#           Configurations and data loading code for the elevator dataset.
+#           uses rgbd data
+#           see: https://github.com/matterport/Mask_RCNN/wiki#training-with-rgb-d-or-grayscale-images
+#
+# author:   Lukas Reithmeier
+# date:     22.04.2020
+#
+# **********************************************************************************************************************
 
 import os
 import sys
