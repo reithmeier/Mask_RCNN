@@ -9,11 +9,16 @@
 * Python version 3.6
 * required python libraries can be found [here](requirements.txt)
 (CPU version) or [here](requirements_gpu.txt) (GPU version)
-* (GPU only) [CUDA Toolkit 10.0](https://developer.nvidia.com/cuda-10.0-download-archive)
-* (GPU only) [cudNN v7.6.3 (August 23, 2019), for CUDA 10.0](https://developer.nvidia.com/rdp/cudnn-archive)
+* [CUDA Toolkit 10.1](https://developer.nvidia.com/cuda-10.1-download-archive-base) (GPU only) 
+* [cudNN v7.6.4 (September 27, 2019), for CUDA 10.1](https://developer.nvidia.com/rdp/cudnn-archive) (GPU only) 
 
 
-
+## Changes to the MASK RCNN Implementation
+This repository contains the following changes to the implementation
+ of the  [Mask R-CNN for Object Detection and Segmentation](https://github.com/matterport/Mask_RCNN)
+1. This repository is fully compatible with Tensorflow Version 2
+1. Support for 4-channel RGBD input data was added
+1. A new CNN backbone network was added similar to the [Fusenet](https://www.researchgate.net/publication/308311897_FuseNet_Incorporating_Depth_into_Semantic_Segmentation_via_Fusion-Based_CNN_Architecture)
 
 ## Datasets
 
@@ -21,19 +26,12 @@ This repository contains functionality to process the Sun RGB-D Dataset and the 
 
 ### SUN RGB-D
 1. Acquire the dataset: https://github.com/chrischoy/SUN_RGBD
-1. Preprocess the dataset with [./samples/sun/preprocess.py](./samples/sun/preprocess.py)
-1. open jupyter notebook with `jupyter notebook`
-1. Inspect the dataset with [./samples/sun/inspect_data_d.ipynb](./samples/sun/inspect_data_d.ipynb), 
-[./samples/sun/inspect_data_d3.ipynb](./samples/sun/inspect_data_d3.ipynb),
-[./samples/sun/inspect_data_rgb.ipynb](./samples/sun/inspect_data_rgb.ipynb),
-[./samples/sun/inspect_data_rgbd.ipynb](./samples/sun/inspect_data_rgbd.ipynb)
-1. Train a model with [./samples/sun/train_model_d.ipynb](./samples/sun/train_model_d.ipynb), 
-[./samples/sun/train_model_d3.ipynb](./samples/sun/train_model_d3.ipynb),
-[./samples/sun/train_model_rgb.ipynb](./samples/sun/train_model_rgb.ipynb),
-[./samples/sun/train_model_rgbd.ipynb](./samples/sun/train_model_rgbd.ipynb)
+1. Preprocess the dataset with [preprocess.py](samples/sun/preprocess/preprocess.py)
+1. Generate the masks with [calc_masks.py](samples/sun/preprocess/calc_masks.py)
+
 
 ### EDEN Elevator
-1. Aquire the dataset by processing ROS-Bag files with [./samples/elevator/realsense_reader.py](samples/elevator/data_generation/realsense_reader.py)
+1. Aquire the dataset by processing ROS-Bag files with [realsense_reader.py](samples/elevator/data_generation/realsense_reader.py)
 1. Label the dataset with https://github.com/heartexlabs/label-studio 
     1. `git clone https://github.com/heartexlabs/label-studio.git`
     1. change line 10 in docker-compose.yaml to `command: "label-studio start my_project --init --force --input-path=./my_project/path/to/rgb --input-format=image-dir --label-config='./my_project/path/to/new/config.xml'"`
@@ -42,13 +40,15 @@ This repository contains functionality to process the Sun RGB-D Dataset and the 
     1. run it with docker-compose up -d
     1. label the data
     1. add the labels to the dataset with `python ./samples/elevator/rename_label_files.py -i label_studio_dir/my-project/completions/ -o dataset_dir`
-1. split the data into train, validation, test with [./samples/elevator/split.py](samples/elevator/data_generation/split.py)
-1. open jupyter notebook with `jupyter notebook`
-1. Inspect the dataset with 
-[./samples/elevator/inspect_data_d3.ipynb](./samples/elevator/inspect_data_d3.ipynb),
-[./samples/elevator/inspect_data_rgb.ipynb](./samples/elevator/inspect_data_rgb.ipynb),
-[./samples/elevator/inspect_data_rgbd.ipynb](./samples/elevator/inspect_data_rgbd.ipynb)
-1. Train a model with 
-[./samples/elevator/train_model_d3.ipynb](./samples/elevator/train_model_d3.ipynb),
-[./samples/elevator/train_model_rgb.ipynb](./samples/elevator/train_model_rgb.ipynb),
-[./samples/elevator/train_model_rgbd.ipynb](./samples/elevator/train_model_rgbd.ipynb)
+1. Remove empty entries with remove [remove_empty_images.py](samples/elevator/data_generation/remove_empty_images.py)
+1. Generate the masks with [calc_masks.py](samples/elevator/data_generation/calc_masks.py)
+1. Split the data into train, validation, test with [split.py](samples/elevator/data_generation/split.py)
+1. Check class distribution with  [class_distribution.py](samples/elevator/data_generation/class_distribution.py)
+
+
+## Inspection and Training
+* Each sample subdirectory contains jupyter notebooks for inspection and training 
+of the datasets and models. These can be used for visual confirmation.
+* To perform a hyper parameter optimization use [hyper_parameter_optimization.py](samples/elevator/hyper_parameter_optimization.py)
+* To perform a training of a single model use [training_strategy.py](samples/elevator/training_strategy.py)
+
