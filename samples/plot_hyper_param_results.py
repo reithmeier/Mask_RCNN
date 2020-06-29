@@ -35,6 +35,7 @@ def scatter_plot(data_x, data_y, x_label, y_label):
     :param y_label: label of y axis
     :return:
     """
+
     font = {'family': 'arial',
             'size': 16}
 
@@ -42,12 +43,23 @@ def scatter_plot(data_x, data_y, x_label, y_label):
 
     colors = np.arange(10)
     area = np.pi * 30
+
     plt.scatter(data_x, data_y, s=area, c=colors, alpha=0.8)
-    plt.set_cmap(matplotlib.cm.get_cmap('hsv'))
+    plt.set_cmap(matplotlib.cm.get_cmap('tab10'))
+    plt.margins(0.2, 0.1)
+
     plt.xticks(np.unique(data_x))
     plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.show()
+
+
+def wrap_labels(labels):
+    for i in range(len(labels)):
+        if isinstance(labels[i], str):
+            labels[i] = labels[i].replace('_', '\n', 1)
+            labels[i] = labels[i].replace('_', ' ')
+    return labels
 
 
 def plot_results(result):
@@ -60,7 +72,7 @@ def plot_results(result):
     scatter_plot(result['optimizer'], result['f1score'], 'optimizer',
                  'f1 score')
     if 'backbone' in result:
-        scatter_plot(result['backbone'], result['f1score'], 'backbone',
+        scatter_plot(wrap_labels(result['backbone']), result['f1score'], 'backbone',
                      'f1 score')
     if 'num_filters' in result:
         scatter_plot(result['num_filters'], result['f1score'], 'num_filters',
