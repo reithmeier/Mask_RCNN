@@ -15,9 +15,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
 
-
 # search space
 space = OrderedDict([
+    ('num_filters', ["[32, 32, 64, 128, 256]", "[64, 64, 128, 256, 512]", "[128, 128, 256, 512, 1024]"]),
     ('backbone', ["resnet50_batch_size1", "resnet50_batch_size2", "resnet101"]),
     ('train_rois_per_image', [50, 100, 200]),
     ('detection_min_confidence', [0.6, 0.7, 0.8]),
@@ -57,8 +57,12 @@ def plot_results(result):
                  'f1 score')
     scatter_plot(result['optimizer'], result['f1score'], 'optimizer',
                  'f1 score')
-    scatter_plot(result['backbone'], result['f1score'], 'backbone',
-                 'f1 score')
+    if 'backbone' in result:
+        scatter_plot(result['backbone'], result['f1score'], 'backbone',
+                     'f1 score')
+    if 'num_filters' in result:
+        scatter_plot(result['num_filters'], result['f1score'], 'num_filters',
+                     'f1 score')
     scatter_plot(result['train_rois_per_image'], result['f1score'], 'train rois per image',
                  'f1 score')
 
