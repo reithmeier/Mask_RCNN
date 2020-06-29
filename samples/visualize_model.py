@@ -21,8 +21,6 @@ from samples.sun.sunrgbd import SunRGBDConfig, SunRGBDDataset
 from samples.sun.sunrgbd_fusenet import SunRGBDFusenetConfig, SunRGBDFusenetDataset
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
 
-# from tf_explain.core import GradCAM
-
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../")
 
