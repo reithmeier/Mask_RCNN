@@ -11,6 +11,7 @@ from collections import OrderedDict
 
 import joblib
 import matplotlib
+import matplotlib.cm
 import matplotlib.pyplot as plt
 import numpy as np
 from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
@@ -39,9 +40,10 @@ def scatter_plot(data_x, data_y, x_label, y_label):
 
     matplotlib.rc('font', **font)
 
-    colors = (0, 0, 0)
-    area = np.pi * 10
+    colors = np.arange(10)
+    area = np.pi * 30
     plt.scatter(data_x, data_y, s=area, c=colors, alpha=0.8)
+    plt.set_cmap(matplotlib.cm.get_cmap('hsv'))
     plt.xticks(np.unique(data_x))
     plt.xlabel(x_label)
     plt.ylabel(y_label)
