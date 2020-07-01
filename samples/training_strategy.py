@@ -30,7 +30,7 @@ sys.path.append('.')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 from mrcnn import utils
 import mrcnn.model as modellib
-
+import keras
 from samples.elevator.elevator_d3 import ElevatorD3Config, ElevatorD3Dataset
 from samples.elevator.elevator_rgb import ElevatorRGBConfig, ElevatorRGBDataset
 from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDataset
@@ -45,7 +45,11 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
                               model_dir=model_dir)
     print(model.keras_model.summary())
     if load_model:
-        model.keras_model.load_weights(model_dir + model_name)
+        # loaded_model = keras.models.load_model(model_name, compile=False)
+        # model.keras_model = loaded_model
+        model.load_weights(model_name, by_name=True,
+                           exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",
+                                    "mrcnn_bbox", "mrcnn_mask"])
         model.epoch = init_epoch
 
     if augment:
@@ -105,8 +109,8 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
 
     elif train_layers == "all":
         custom_callbacks = [keras.callbacks.LearningRateScheduler(
-            lambda epoch_index: config.LEARNING_RATE * 5 if epoch_index < epochs[0]
-            else config.LEARNING_RATE if epoch_index < epochs[1]
+            lambda epoch_index: config.LEARNING_RATE if epoch_index < epochs[0]
+            else config.LEARNING_RATE / 5 if epoch_index < epochs[1]
             else config.LEARNING_RATE / 10
         )]
         # training stage 1
@@ -252,9 +256,11 @@ def main(data_set, strategy, data_dir, model_dir, augment, load_model, model_nam
     config.IMAGES_PER_GPU = batch_size
     config.OPTIMIZER = "ADAM"
     config.LEARNING_RATE = 0.0001
+    config.DETECTION_MIN_CONFIDENCE = 0.7
+    config.TRAIN_ROIS_PER_IMAGE = 100
     config.display()
 
-    epochs = [20, 40, 80]
+    epochs = [300, 600, 1000]
     model_path = model_dir + data_set + "_" + strategy + ".h5"
     model = train_model(config=config, dataset_train=dataset_train, dataset_val=dataset_val, epochs=epochs,
                         model_dir=model_dir, augment=augment, load_model=load_model, model_name=model_name,
@@ -268,14 +274,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                            "I:\\Data\\sun_rgbd\\crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
-                        default=ROOT_DIR + "/logs/")
+                        default="I:\\training_logs\\")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
-                        default="RGBDFusenet")
+                        default="RGB")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
-         load_model=False, model_name="sunrgb20200517T1349\mask_rcnn_sunrgb_0052.h5", init_epoch=1, train_layers="all",
-         backbone="fusenet", batch_size=1)
+         load_model=False, model_name="", init_epoch=1, train_layers="all",
+         backbone="resnet50", batch_size=2)
