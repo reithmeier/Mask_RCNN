@@ -15,6 +15,7 @@ import random
 import numpy as np
 import cv2
 import skimage.draw
+import skimage.io
 
 # Root directory of the project
 ROOT_DIR = os.path.abspath("../../")
@@ -61,7 +62,6 @@ class SunRGBConfig(Config):
 
     # Skip detections with < 90% confidence
     # DETECTION_MIN_CONFIDENCE = 0.9
-
 
 
 class SunRGBDataset(utils.Dataset):
@@ -118,7 +118,10 @@ class SunRGBDataset(utils.Dataset):
                 path=rgb_image_path,
                 lbl_image_path=lbl_image_path,
                 msk_full_path=msk_full_path,
-                cls_full_path=cls_full_path
+                cls_full_path=cls_full_path,
+                rgb_image=self.open_image(rgb_image_path),
+                masks=self.open_mask(msk_full_path),
+                class_ids=self.open_class_ids(cls_full_path)
             )
 
     def image_reference(self, image_id):
@@ -128,6 +131,12 @@ class SunRGBDataset(utils.Dataset):
             return info["path"]
         else:
             super(self.__class__, self).image_reference(image_id)
+
+    def open_mask(self, path):
+        return np.load(path)
+
+    def open_class_ids(self, path):
+        return np.load(path)
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -140,7 +149,20 @@ class SunRGBDataset(utils.Dataset):
         image_info = self.image_info[image_id]
         if image_info["source"] != "sunrgb":
             return super(self.__class__, self).load_mask(image_id)
-        masks = np.load(image_info["msk_full_path"])
-        class_ids = np.load(image_info["cls_full_path"])
-        return masks, class_ids
 
+        return self.image_info[image_id]['masks'], self.image_info[image_id]['class_ids']
+
+    def open_image(self, image_path):
+        # Load image
+        image = skimage.io.imread(image_path)
+        return image
+
+    def load_image(self, image_id):
+        """access in memory image
+        """
+        # If not a sun dataset image, delegate to parent class.
+        image_info = self.image_info[image_id]
+        if image_info["source"] != "sunrgb":
+            return super(self.__class__, self).load_mask(image_id)
+
+        return self.image_info[image_id]['rgb_image']

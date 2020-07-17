@@ -163,14 +163,20 @@ def fusenet_stage_2(x_rgb, x_dpt, n_filters, kernel_size):
 
 def fusenet_stage_3(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
     # dpt branch
-    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2", branch="dpt")
-    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3", branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3",
+                      branch="dpt")
 
     # rgb branch
-    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2", branch="rgb")
-    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3", branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3",
+                      branch="rgb")
     x_rgb = fusion_block(x_rgb, x_dpt, stage="3", block="fsn", branch="rgb")
     x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="rgb")
     x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="3", block="dropout", branch="rgb")
@@ -270,7 +276,7 @@ def cbr_block(input_tensor, kernel_size, filters, stage, block, branch,
 # https://github.com/fchollet/deep-learning-models/blob/master/resnet50.py
 
 def identity_block(input_tensor, kernel_size, filters, stage, block,
-                   use_bias=True, train_bn=True, postfix=""):
+                   use_bias=True, train_bn=True, dropout_rate=0, postfix=""):
     """The identity_block is the block that has no conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -284,20 +290,30 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
+    dropout_name = 'drop' + str(stage) + block + '_branch'
 
     x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a' + postfix,
                   use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2a' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
                   name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2b' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c' + postfix,
                   use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2c' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     x = KL.Add()([x, input_tensor])
     x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
@@ -305,7 +321,7 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
 
 
 def conv_block(input_tensor, kernel_size, filters, stage, block,
-               strides=(2, 2), use_bias=True, train_bn=True, postfix=""):
+               strides=(2, 2), use_bias=True, train_bn=True, dropout_rate=0, postfix=""):
     """conv_block is the block that has a conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -321,24 +337,37 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
+    dropout_name = 'drop' + str(stage) + block + '_branch'
 
     x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
                   name=conv_name_base + '2a' + postfix, use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2a' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
                   name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2b' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base +
                                            '2c' + postfix, use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2c' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
                          name=conv_name_base + '1' + postfix, use_bias=use_bias)(input_tensor)
-    shortcut = BatchNorm(name=bn_name_base + '1' + postfix)(shortcut, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '1' + postfix)(x)
+    else:
+        shortcut = BatchNorm(name=bn_name_base + '1' + postfix)(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
     x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
@@ -355,7 +384,7 @@ def fusion_layer(a, b):
     return KL.Activation('relu')(KL.Add()([a, b]))
 
 
-def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True, parallel=False):
+def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True, parallel=False, dropout_rate=0):
     """
     Build a ResNet graph.
     if parallel:
@@ -378,7 +407,8 @@ def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True
                                      architecture=architecture, stage5=stage5, train_bn=train_bn)
 
     else:
-        return resnet_graph(input_image=input_image, architecture=architecture, stage5=stage5, train_bn=train_bn)
+        return resnet_graph(input_image=input_image, architecture=architecture, stage5=stage5, train_bn=train_bn,
+                            dropout_rate=dropout_rate)
 
 
 def resnet_stage_1(input_image, postfix, train_bn):
@@ -460,7 +490,7 @@ def resnet_graph_parallel(input_image_rgb, input_image_dpt, architecture, stage5
     return [C1, C2, C3, C4, C5]
 
 
-def resnet_graph(input_image, architecture, stage5=False, train_bn=True, postfix=""):
+def resnet_graph(input_image, architecture, stage5=False, train_bn=True, dropout_rate=0, postfix=""):
     """Build a ResNet graph.
         architecture: Can be resnet50 or resnet101
         stage5: Boolean. If False, stage5 of the network is not created
@@ -470,29 +500,44 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True, postfix
     # Stage 1
     x = KL.ZeroPadding2D((3, 3))(input_image)
     x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1' + postfix, use_bias=True)(x)
+    if dropout_rate > 0:
+        print("use dropout")
+        x = KL.Dropout(dropout_rate, name='dropout_conv1' + postfix)(x)
     x = BatchNorm(name='bn_conv1' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
     C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
     # Stage 2
-    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn, postfix=postfix)
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix)
-    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix)
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix,
+                            dropout_rate=dropout_rate)
     # Stage 3
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix)
-    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix)
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix,
+                            dropout_rate=dropout_rate)
     # Stage 4
-    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix)
+    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
     block_count = {"resnet50": 5, "resnet101": 22}[architecture]
     for i in range(block_count):
-        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix)
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix,
+                           dropout_rate=dropout_rate)
     C4 = x
     # Stage 5
     if stage5:
-        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix)
-        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix)
-        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix)
+        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix,
+                           dropout_rate=dropout_rate)
+        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix,
+                                dropout_rate=dropout_rate)
     else:
         C5 = None
     return [C1, C2, C3, C4, C5]
@@ -2197,7 +2242,8 @@ class MaskRCNN():
             else:
                 _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
                                                           stage5=True, train_bn=config.TRAIN_BN,
-                                                          parallel=config.PARALLEL_BACKBONE)
+                                                          parallel=config.PARALLEL_BACKBONE,
+                                                          dropout_rate=config.DROPOUT_RATE)
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
         P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
