@@ -22,6 +22,7 @@ import urllib.request
 import shutil
 import warnings
 from distutils.version import LooseVersion
+import pandas as pd
 
 # URL from which to download the latest COCO trained weights
 COCO_MODEL_URL = "https://github.com/matterport/Mask_RCNN/releases/download/v2.0/mask_rcnn_coco.h5"
@@ -101,7 +102,7 @@ def compute_overlaps_masks(masks1, masks2):
     """Computes IoU overlaps between two sets of masks.
     masks1, masks2: [Height, Width, instances]
     """
-    
+
     # If either set of masks is empty return empty result
     if masks1.shape[-1] == 0 or masks2.shape[-1] == 0:
         return np.zeros((masks1.shape[-1], masks2.shape[-1]))
@@ -455,9 +456,10 @@ def resize_image(image, min_dim=None, max_dim=None, min_scale=None, mode="square
         bottom_pad = max_dim - h - top_pad
         left_pad = (max_dim - w) // 2
         right_pad = max_dim - w - left_pad
-        padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
-        image = np.pad(image, padding, mode='constant', constant_values=0)
-        window = (top_pad, left_pad, h + top_pad, w + left_pad)
+        if right_pad > 0 or left_pad > 0 or bottom_pad > 0 or top_pad > 0:
+            padding = [(top_pad, bottom_pad), (left_pad, right_pad), (0, 0)]
+            image = np.pad(image, padding, mode='constant', constant_values=0)
+            window = (top_pad, left_pad, h + top_pad, w + left_pad)
     elif mode == "pad64":
         h, w = image.shape[:2]
         # Both sides must be divisible by 64
@@ -708,8 +710,25 @@ def compute_matches(gt_boxes, gt_class_ids, gt_masks,
                 gt_match[j] = i
                 pred_match[i] = j
                 break
+    columns = ["tp", "fp", "fn", "score"]
+    tp_fp_fn = pd.DataFrame(columns=columns)
+    for i in range(len(gt_match)):
+        if gt_match[i] == -1:
+            # false negative
+            tp_fp_fn = tp_fp_fn.append(
+                pd.DataFrame([[0, 0, 1, 1.0]], columns=columns), ignore_index=True
+            )
+    for i in range(len(pred_match)):
+        if pred_match[i] == -1:
+            tp_fp_fn = tp_fp_fn.append(
+                pd.DataFrame([[0, 1, 0, pred_scores[i]]], columns=columns), ignore_index=True
+            )
+        else:
+            tp_fp_fn = tp_fp_fn.append(
+                pd.DataFrame([[1, 0, 0, pred_scores[i]]], columns=columns), ignore_index=True
+            )
 
-    return gt_match, pred_match, overlaps
+    return gt_match, pred_match, overlaps, tp_fp_fn
 
 
 def compute_ap(gt_boxes, gt_class_ids, gt_masks,
@@ -724,7 +743,7 @@ def compute_ap(gt_boxes, gt_class_ids, gt_masks,
     overlaps: [pred_boxes, gt_boxes] IoU overlaps.
     """
     # Get matches and overlaps
-    gt_match, pred_match, overlaps = compute_matches(
+    gt_match, pred_match, overlaps, _ = compute_matches(
         gt_boxes, gt_class_ids, gt_masks,
         pred_boxes, pred_class_ids, pred_scores, pred_masks,
         iou_threshold)
@@ -757,14 +776,14 @@ def compute_ap_range(gt_box, gt_class_id, gt_mask,
     """Compute AP over a range or IoU thresholds. Default range is 0.5-0.95."""
     # Default is 0.5 to 0.95 with increments of 0.05
     iou_thresholds = iou_thresholds or np.arange(0.5, 1.0, 0.05)
-    
+
     # Compute AP over range of IoU thresholds
     AP = []
     for iou_threshold in iou_thresholds:
-        ap, precisions, recalls, overlaps =\
+        ap, precisions, recalls, overlaps= \
             compute_ap(gt_box, gt_class_id, gt_mask,
-                        pred_box, pred_class_id, pred_score, pred_mask,
-                        iou_threshold=iou_threshold)
+                       pred_box, pred_class_id, pred_score, pred_mask,
+                       iou_threshold=iou_threshold)
         if verbose:
             print("AP @{:.2f}:\t {:.3f}".format(iou_threshold, ap))
         AP.append(ap)

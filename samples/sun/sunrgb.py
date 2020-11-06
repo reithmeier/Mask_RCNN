@@ -119,9 +119,9 @@ class SunRGBDataset(utils.Dataset):
                 lbl_image_path=lbl_image_path,
                 msk_full_path=msk_full_path,
                 cls_full_path=cls_full_path,
-                rgb_image=self.open_image(rgb_image_path),
-                masks=self.open_mask(msk_full_path),
-                class_ids=self.open_class_ids(cls_full_path)
+                #rgb_image=self.open_image(rgb_image_path),
+                #masks=self.open_mask(msk_full_path),
+                #class_ids=self.open_class_ids(cls_full_path)
             )
 
     def image_reference(self, image_id):
@@ -150,7 +150,8 @@ class SunRGBDataset(utils.Dataset):
         if image_info["source"] != "sunrgb":
             return super(self.__class__, self).load_mask(image_id)
 
-        return self.image_info[image_id]['masks'], self.image_info[image_id]['class_ids']
+        #return self.image_info[image_id]['masks'], self.image_info[image_id]['class_ids']
+        return self.open_mask(self.image_info[image_id]['msk_full_path']), self.open_class_ids(self.image_info[image_id]['cls_full_path'])
 
     def open_image(self, image_path):
         # Load image
@@ -165,4 +166,5 @@ class SunRGBDataset(utils.Dataset):
         if image_info["source"] != "sunrgb":
             return super(self.__class__, self).load_mask(image_id)
 
-        return self.image_info[image_id]['rgb_image']
+        return self.open_image(self.image_info[image_id]['path'])
+        #return self.image_info[image_id]['rgb_image']
