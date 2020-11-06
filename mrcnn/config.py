@@ -48,7 +48,7 @@ class Config(object):
     VALIDATION_STEPS = 50
 
     # Backbone network architecture
-    # Supported values are: resnet50, resnet101.
+    # Supported values are: resnet50, resnet101, fusenet.
     # You can also provide a callable that should have the signature
     # of model.resnet_graph. If you do so, you need to supply a callable
     # to COMPUTE_BACKBONE_SHAPE as well
@@ -90,7 +90,7 @@ class Config(object):
 
     # How many anchors per image to use for RPN training
     RPN_TRAIN_ANCHORS_PER_IMAGE = 256
-    
+
     # ROIs kept after tf.nn.top_k and before non-maximum suppression
     PRE_NMS_LIMIT = 6000
 
@@ -210,6 +210,23 @@ class Config(object):
     # Gradient norm clipping
     GRADIENT_CLIP_NORM = 5.0
 
+    # if true, backbone has 2 parallel branches, 1 for rgb image and 1 for depth image
+    # otherwise the default backbone is used
+    PARALLEL_BACKBONE = False
+
+    # dropout for FuseNet backbone architecture
+    DROPOUT_RATE = 0.3
+
+    # number of filters in each stage of the FuseNet backbone
+    NUM_FILTERS = [64, 64, 128, 256, 512]
+
+    # size of kernel in each stage of the FuseNet backbone
+    KERNEL_SIZE = [7, 3, 3, 3, 3]
+
+    # optimizer used
+    #   supported values [SGD, ADAM]
+    OPTIMIZER = "SGD"
+
     def __init__(self):
         """Set values of computed attributes."""
         # Effective batch size
@@ -218,10 +235,10 @@ class Config(object):
         # Input image size
         if self.IMAGE_RESIZE_MODE == "crop":
             self.IMAGE_SHAPE = np.array([self.IMAGE_MIN_DIM, self.IMAGE_MIN_DIM,
-                self.IMAGE_CHANNEL_COUNT])
+                                         self.IMAGE_CHANNEL_COUNT])
         else:
             self.IMAGE_SHAPE = np.array([self.IMAGE_MAX_DIM, self.IMAGE_MAX_DIM,
-                self.IMAGE_CHANNEL_COUNT])
+                                         self.IMAGE_CHANNEL_COUNT])
 
         # Image meta data length
         # See compose_image_meta() for details

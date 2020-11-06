@@ -7,26 +7,27 @@ Licensed under the MIT License (see LICENSE for details)
 Written by Waleed Abdulla
 """
 
+import datetime
+import logging
+import math
+import multiprocessing
 import os
 import random
-import datetime
 import re
-import math
-import logging
 from collections import OrderedDict
-import multiprocessing
-import numpy as np
-import tensorflow as tf
+# Requires TensorFlow 1.3+ and Keras 2.0.8+.
+from distutils.version import LooseVersion
+
 import keras
 import keras.backend as K
-import keras.layers as KL
 import keras.engine as KE
+import keras.layers as KL
 import keras.models as KM
+import numpy as np
+import tensorflow as tf
 
 from mrcnn import utils
 
-# Requires TensorFlow 1.3+ and Keras 2.0.8+.
-from distutils.version import LooseVersion
 assert LooseVersion(tf.__version__) >= LooseVersion("1.3")
 assert LooseVersion(keras.__version__) >= LooseVersion('2.0.8')
 
@@ -43,9 +44,9 @@ def log(text, array=None):
         text = text.ljust(25)
         text += ("shape: {:20}  ".format(str(array.shape)))
         if array.size:
-            text += ("min: {:10.5f}  max: {:10.5f}".format(array.min(),array.max()))
+            text += ("min: {:10.5f}  max: {:10.5f}".format(array.min(), array.max()))
         else:
-            text += ("min: {:10}  max: {:10}".format("",""))
+            text += ("min: {:10}  max: {:10}".format("", ""))
         text += "  {}".format(array.dtype)
     print(text)
 
@@ -58,6 +59,7 @@ class BatchNorm(KL.BatchNormalization):
     so this layer is often frozen (via setting in Config class) and functions
     as linear layer.
     """
+
     def call(self, inputs, training=None):
         """
         Note about training values:
@@ -78,11 +80,192 @@ def compute_backbone_shapes(config, image_shape):
         return config.COMPUTE_BACKBONE_SHAPE(image_shape)
 
     # Currently supports ResNet only
-    assert config.BACKBONE in ["resnet50", "resnet101"]
+    assert config.BACKBONE in ["resnet50", "resnet101", "fusenet"]
     return np.array(
         [[int(math.ceil(image_shape[0] / stride)),
-            int(math.ceil(image_shape[1] / stride))]
-            for stride in config.BACKBONE_STRIDES])
+          int(math.ceil(image_shape[1] / stride))]
+         for stride in config.BACKBONE_STRIDES])
+
+
+############################################################
+#  Fusenet Graph
+############################################################
+
+
+def fusenet_graph(input_image, dropout_rate, n_filters, kernel_sizes):
+    """
+    Build a FuseNet Graph
+    :param dropout_rate: dropout rate
+    :param input_image:
+    :param n_filters: array with number of filters per layer
+    :param kernel_sizes: array with kernel size per layer
+    :return: FuseNet Graph
+    """
+    x_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
+    x_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
+
+    x_rgb, x_dpt = fusenet_stage_1(x_rgb=x_rgb, x_dpt=x_dpt, n_filters=n_filters[0], kernel_size=kernel_sizes[0])
+    C1 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_2(x_rgb=x_rgb, x_dpt=x_dpt, n_filters=n_filters[1], kernel_size=kernel_sizes[1])
+    C2 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_3(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[2],
+                                   kernel_size=kernel_sizes[2])
+    C3 = x_rgb
+    x_rgb, x_dpt = fusenet_stage_4(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[3],
+                                   kernel_size=kernel_sizes[3])
+    C4 = x_rgb
+    x_rgb = fusenet_stage_5(x_rgb=x_rgb, x_dpt=x_dpt, dropout_rate=dropout_rate, n_filters=n_filters[4],
+                            kernel_size=kernel_sizes[4])
+    C5 = x_rgb
+
+    return C1, C2, C3, C4, C5
+
+
+def fusenet_stage_1(x_rgb, x_dpt, n_filters, kernel_size):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr2",
+                      branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="1", block="cbr2",
+                      branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="1", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="1", block="pool", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="1", block="pool", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_2(x_rgb, x_dpt, n_filters, kernel_size):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr2",
+                      branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="2", block="cbr2",
+                      branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="2", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="2", block="pool", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="2", block="pool", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_3(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3",
+                      branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="3", block="cbr3",
+                      branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="3", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="3", block="dropout", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="3", block="pool", branch="dpt")
+    x_dpt = dropout_block(x_dpt, dropout_rate=dropout_rate, stage="3", block="dropout", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_4(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr3",
+                      branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="4", block="cbr3",
+                      branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="4", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="4", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="4", block="dropout", branch="rgb")
+
+    x_dpt = pool_block(x_dpt, kernel_size=3, strides=(2, 2), stage="4", block="pool", branch="dpt")
+    x_dpt = dropout_block(x_dpt, dropout_rate=dropout_rate, stage="4", block="dropout", branch="dpt")
+
+    return x_rgb, x_dpt
+
+
+def fusenet_stage_5(x_rgb, x_dpt, dropout_rate, n_filters, kernel_size):
+    # dpt branch
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr1",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr2",
+                      branch="dpt")
+    x_dpt = cbr_block(x_dpt, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr3",
+                      branch="dpt")
+
+    # rgb branch
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr1",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr2",
+                      branch="rgb")
+    x_rgb = cbr_block(x_rgb, filters=n_filters, kernel_size=kernel_size, strides=(1, 1), stage="5", block="cbr3",
+                      branch="rgb")
+    x_rgb = fusion_block(x_rgb, x_dpt, stage="5", block="fsn", branch="rgb")
+    x_rgb = pool_block(x_rgb, kernel_size=3, strides=(2, 2), stage="5", block="pool", branch="rgb")
+    x_rgb = dropout_block(x_rgb, dropout_rate=dropout_rate, stage="5", block="dropout", branch="rgb")
+
+    return x_rgb
+
+
+def fusion_block(a, b, stage, block, branch):
+    add_name = 'add' + str(stage) + block + '_branch' + branch
+    activation_name = 'relu' + str(stage) + block + '_branch' + branch
+    x = KL.Add(name=add_name)([a, b])
+    x = KL.Activation('relu', name=activation_name)(x)
+    return x
+
+
+def dropout_block(input_tensor, dropout_rate, stage, block, branch):
+    dropout_name = 'drop' + str(stage) + block + '_branch' + branch
+    x = KL.Dropout(dropout_rate, name=dropout_name)(input_tensor)
+    return x
+
+
+def pool_block(input_tensor, kernel_size, strides, stage, block, branch):
+    pool_name = 'pl' + str(stage) + block + '_branch' + branch
+    x = KL.MaxPooling2D((kernel_size, kernel_size), strides=strides, padding="same", name=pool_name)(input_tensor)
+    return x
+
+
+def cbr_block(input_tensor, kernel_size, filters, stage, block, branch,
+              strides=(2, 2), use_bias=True, train_bn=True):
+    conv_name = 'conv' + str(stage) + block + '_branch' + branch
+    bn_name = 'bn' + str(stage) + block + '_branch' + branch
+    act_name = 'relu' + str(stage) + block + '_branch' + branch
+    x = KL.Conv2D(filters, (kernel_size, kernel_size), strides=strides, padding='same',
+                  name=conv_name, use_bias=use_bias)(input_tensor)
+    x = BatchNorm(name=bn_name)(x, training=train_bn)
+    x = KL.Activation('relu', name=act_name)(x)
+    return x
 
 
 ############################################################
@@ -93,7 +276,7 @@ def compute_backbone_shapes(config, image_shape):
 # https://github.com/fchollet/deep-learning-models/blob/master/resnet50.py
 
 def identity_block(input_tensor, kernel_size, filters, stage, block,
-                   use_bias=True, train_bn=True):
+                   use_bias=True, train_bn=True, dropout_rate=0, postfix=""):
     """The identity_block is the block that has no conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -107,28 +290,38 @@ def identity_block(input_tensor, kernel_size, filters, stage, block,
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
+    dropout_name = 'drop' + str(stage) + block + '_branch'
 
-    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a',
+    x = KL.Conv2D(nb_filter1, (1, 1), name=conv_name_base + '2a' + postfix,
                   use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2a' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
+                  name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2b' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
-    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c',
+    x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base + '2c' + postfix,
                   use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2c' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     x = KL.Add()([x, input_tensor])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
     return x
 
 
 def conv_block(input_tensor, kernel_size, filters, stage, block,
-               strides=(2, 2), use_bias=True, train_bn=True):
+               strides=(2, 2), use_bias=True, train_bn=True, dropout_rate=0, postfix=""):
     """conv_block is the block that has a conv layer at shortcut
     # Arguments
         input_tensor: input tensor
@@ -144,31 +337,160 @@ def conv_block(input_tensor, kernel_size, filters, stage, block,
     nb_filter1, nb_filter2, nb_filter3 = filters
     conv_name_base = 'res' + str(stage) + block + '_branch'
     bn_name_base = 'bn' + str(stage) + block + '_branch'
+    dropout_name = 'drop' + str(stage) + block + '_branch'
 
     x = KL.Conv2D(nb_filter1, (1, 1), strides=strides,
-                  name=conv_name_base + '2a', use_bias=use_bias)(input_tensor)
-    x = BatchNorm(name=bn_name_base + '2a')(x, training=train_bn)
+                  name=conv_name_base + '2a' + postfix, use_bias=use_bias)(input_tensor)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2a' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2a' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter2, (kernel_size, kernel_size), padding='same',
-                  name=conv_name_base + '2b', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2b')(x, training=train_bn)
+                  name=conv_name_base + '2b' + postfix, use_bias=use_bias)(x)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2b' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2b' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
 
     x = KL.Conv2D(nb_filter3, (1, 1), name=conv_name_base +
-                  '2c', use_bias=use_bias)(x)
-    x = BatchNorm(name=bn_name_base + '2c')(x, training=train_bn)
+                                           '2c' + postfix, use_bias=use_bias)(x)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '2c' + postfix)(x)
+    else:
+        x = BatchNorm(name=bn_name_base + '2c' + postfix)(x, training=train_bn)
 
     shortcut = KL.Conv2D(nb_filter3, (1, 1), strides=strides,
-                         name=conv_name_base + '1', use_bias=use_bias)(input_tensor)
-    shortcut = BatchNorm(name=bn_name_base + '1')(shortcut, training=train_bn)
+                         name=conv_name_base + '1' + postfix, use_bias=use_bias)(input_tensor)
+    if dropout_rate > 0:
+        x = KL.Dropout(dropout_rate, name=dropout_name + '1' + postfix)(x)
+    else:
+        shortcut = BatchNorm(name=bn_name_base + '1' + postfix)(shortcut, training=train_bn)
 
     x = KL.Add()([x, shortcut])
-    x = KL.Activation('relu', name='res' + str(stage) + block + '_out')(x)
+    x = KL.Activation('relu', name='res' + str(stage) + block + '_out' + postfix)(x)
     return x
 
 
-def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
+def fusion_layer(a, b):
+    """
+    fusion similar to fusenet
+    :param a: branch a to fuse
+    :param b: branch b to fuse
+    :return: relu(a+b)
+    """
+    return KL.Activation('relu')(KL.Add()([a, b]))
+
+
+def resnet_parallel_graph(input_image, architecture, stage5=False, train_bn=True, parallel=False, dropout_rate=0):
+    """
+    Build a ResNet graph.
+    if parallel:
+    * there will be a resnet for rgb input image and a resnet for depth input image
+    * these resnets will be fused similar to fusenet
+    * a input shape [?, ?, ?, 4] is necessary
+    :param input_image: 
+    :param architecture: Can be resnet50 or resnet101
+    :param stage5: Boolean. If False, stage5 of the network is not created
+    :param train_bn: Boolean. Train or freeze Batch Norm layers
+    :param parallel: Boolean. If True parallel version is created
+    :return: ResNet graph
+    """
+    if parallel:
+        # assert input_image.dims == 4 and input_image.shape[3] == 4  # assert RGB-D input
+        input_image_rgb = KL.Lambda(lambda x: x[:, :, :, 0: 3])(input_image)
+        input_image_dpt = KL.Lambda(lambda x: x[:, :, :, 3: 4])(input_image)
+
+        return resnet_graph_parallel(input_image_rgb=input_image_rgb, input_image_dpt=input_image_dpt,
+                                     architecture=architecture, stage5=stage5, train_bn=train_bn)
+
+    else:
+        return resnet_graph(input_image=input_image, architecture=architecture, stage5=stage5, train_bn=train_bn,
+                            dropout_rate=dropout_rate)
+
+
+def resnet_stage_1(input_image, postfix, train_bn):
+    # Stage 1 RGB
+    x = KL.ZeroPadding2D((3, 3))(input_image)
+    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1' + postfix, use_bias=True)(x)
+    x = BatchNorm(name='bn_conv1' + postfix)(x, training=train_bn)
+    x = KL.Activation('relu')(x)
+    C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
+    return C1
+
+
+def resnet_stage_2(input_layer, postfix, train_bn):
+    x = conv_block(input_layer, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn,
+                   postfix=postfix)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix)
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix)
+    return C2
+
+
+def resnet_stage_3(input_layer, postfix, train_bn):
+    x = conv_block(input_layer, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix)
+    return C3
+
+
+def resnet_stage_4(input_layer, postfix, train_bn, architecture):
+    x = conv_block(input_layer, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix)
+    block_count = {"resnet50": 5, "resnet101": 22}[architecture]
+    for i in range(block_count):
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix)
+    C4 = x
+    return C4
+
+
+def resnet_stage_5(input_layer, postfix, train_bn, ):
+    x = conv_block(input_layer, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix)
+    x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix)
+    C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix)
+    return C5
+
+
+def resnet_graph_parallel(input_image_rgb, input_image_dpt, architecture, stage5=False, train_bn=True):
+    """Build a ResNet graph with 2 parallel branches.
+        architecture: Can be resnet50 or resnet101
+        stage5: Boolean. If False, stage5 of the network is not created
+        train_bn: Boolean. Train or freeze Batch Norm layers
+    """
+    assert architecture in ["resnet50", "resnet101"]
+    # Stage 1 RGB
+    C1_rgb = resnet_stage_1(input_image=input_image_rgb, postfix="rgb", train_bn=train_bn)
+    C1_dpt = resnet_stage_1(input_image=input_image_dpt, postfix="dpt", train_bn=train_bn)
+    C1 = fusion_layer(C1_rgb, C1_dpt)
+
+    # Stage 2
+    C2_rgb = resnet_stage_2(input_layer=C1, postfix="rgb", train_bn=train_bn)
+    C2_dpt = resnet_stage_2(input_layer=C1_dpt, postfix="dpt", train_bn=train_bn)
+    C2 = fusion_layer(C2_rgb, C2_dpt)
+
+    # Stage 3
+    C3_rgb = resnet_stage_3(input_layer=C2, postfix="rgb", train_bn=train_bn)
+    C3_dpt = resnet_stage_3(input_layer=C2_dpt, postfix="dpt", train_bn=train_bn)
+    C3 = fusion_layer(C3_rgb, C3_dpt)
+
+    # Stage 4
+    C4_rgb = resnet_stage_4(input_layer=C3, postfix="rgb", train_bn=train_bn, architecture=architecture)
+    C4_dpt = resnet_stage_4(input_layer=C3_dpt, postfix="dpt", train_bn=train_bn, architecture=architecture)
+    C4 = fusion_layer(C4_rgb, C4_dpt)
+
+    # Stage 5
+    if stage5:
+        C5_rgb = resnet_stage_5(input_layer=C4, postfix="rgb", train_bn=train_bn)
+        C5_dpt = resnet_stage_5(input_layer=C4_dpt, postfix="dpt", train_bn=train_bn)
+        C5 = fusion_layer(C5_rgb, C5_dpt)
+    else:
+        C5 = None
+    return [C1, C2, C3, C4, C5]
+
+
+def resnet_graph(input_image, architecture, stage5=False, train_bn=True, dropout_rate=0, postfix=""):
     """Build a ResNet graph.
         architecture: Can be resnet50 or resnet101
         stage5: Boolean. If False, stage5 of the network is not created
@@ -177,30 +499,45 @@ def resnet_graph(input_image, architecture, stage5=False, train_bn=True):
     assert architecture in ["resnet50", "resnet101"]
     # Stage 1
     x = KL.ZeroPadding2D((3, 3))(input_image)
-    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1', use_bias=True)(x)
-    x = BatchNorm(name='bn_conv1')(x, training=train_bn)
+    x = KL.Conv2D(64, (7, 7), strides=(2, 2), name='conv1' + postfix, use_bias=True)(x)
+    if dropout_rate > 0:
+        print("use dropout")
+        x = KL.Dropout(dropout_rate, name='dropout_conv1' + postfix)(x)
+    x = BatchNorm(name='bn_conv1' + postfix)(x, training=train_bn)
     x = KL.Activation('relu')(x)
     C1 = x = KL.MaxPooling2D((3, 3), strides=(2, 2), padding="same")(x)
     # Stage 2
-    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn)
-    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn)
-    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn)
+    x = conv_block(x, 3, [64, 64, 256], stage=2, block='a', strides=(1, 1), train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [64, 64, 256], stage=2, block='b', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    C2 = x = identity_block(x, 3, [64, 64, 256], stage=2, block='c', train_bn=train_bn, postfix=postfix,
+                            dropout_rate=dropout_rate)
     # Stage 3
-    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn)
-    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn)
-    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn)
+    x = conv_block(x, 3, [128, 128, 512], stage=3, block='a', train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='b', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    x = identity_block(x, 3, [128, 128, 512], stage=3, block='c', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+    C3 = x = identity_block(x, 3, [128, 128, 512], stage=3, block='d', train_bn=train_bn, postfix=postfix,
+                            dropout_rate=dropout_rate)
     # Stage 4
-    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn)
+    x = conv_block(x, 3, [256, 256, 1024], stage=4, block='a', train_bn=train_bn, postfix=postfix,
+                   dropout_rate=dropout_rate)
     block_count = {"resnet50": 5, "resnet101": 22}[architecture]
     for i in range(block_count):
-        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn)
+        x = identity_block(x, 3, [256, 256, 1024], stage=4, block=chr(98 + i), train_bn=train_bn, postfix=postfix,
+                           dropout_rate=dropout_rate)
     C4 = x
     # Stage 5
     if stage5:
-        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn)
-        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn)
-        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn)
+        x = conv_block(x, 3, [512, 512, 2048], stage=5, block='a', train_bn=train_bn, postfix=postfix,
+                       dropout_rate=dropout_rate)
+        x = identity_block(x, 3, [512, 512, 2048], stage=5, block='b', train_bn=train_bn, postfix=postfix,
+                           dropout_rate=dropout_rate)
+        C5 = x = identity_block(x, 3, [512, 512, 2048], stage=5, block='c', train_bn=train_bn, postfix=postfix,
+                                dropout_rate=dropout_rate)
     else:
         C5 = None
     return [C1, C2, C3, C4, C5]
@@ -285,6 +622,7 @@ class ProposalLayer(KE.Layer):
         # Improve performance by trimming to top anchors by score
         # and doing the rest on the smaller subset.
         pre_nms_limit = tf.minimum(self.config.PRE_NMS_LIMIT, tf.shape(anchors)[1])
+
         ix = tf.nn.top_k(scores, pre_nms_limit, sorted=True,
                          name="top_anchors").indices
         scores = utils.batch_slice([scores, ix], lambda x, y: tf.gather(x, y),
@@ -292,8 +630,8 @@ class ProposalLayer(KE.Layer):
         deltas = utils.batch_slice([deltas, ix], lambda x, y: tf.gather(x, y),
                                    self.config.IMAGES_PER_GPU)
         pre_nms_anchors = utils.batch_slice([anchors, ix], lambda a, x: tf.gather(a, x),
-                                    self.config.IMAGES_PER_GPU,
-                                    names=["pre_nms_anchors"])
+                                            self.config.IMAGES_PER_GPU,
+                                            names=["pre_nms_anchors"])
 
         # Apply deltas to anchors to get refined anchors.
         # [batch, N, (y1, x1, y2, x2)]
@@ -324,6 +662,7 @@ class ProposalLayer(KE.Layer):
             padding = tf.maximum(self.proposal_count - tf.shape(proposals)[0], 0)
             proposals = tf.pad(proposals, [(0, padding), (0, 0)])
             return proposals
+
         proposals = utils.batch_slice([boxes, scores], nms,
                                       self.config.IMAGES_PER_GPU)
         return proposals
@@ -338,7 +677,7 @@ class ProposalLayer(KE.Layer):
 
 def log2_graph(x):
     """Implementation of Log2. TF doesn't have a native implementation."""
-    return tf.log(x) / tf.log(2.0)
+    return tf.math.log(x) / tf.math.log(2.0)
 
 
 class PyramidROIAlign(KE.Layer):
@@ -447,7 +786,7 @@ class PyramidROIAlign(KE.Layer):
         return pooled
 
     def compute_output_shape(self, input_shape):
-        return input_shape[0][:2] + self.pool_shape + (input_shape[2][-1], )
+        return input_shape[0][:2] + self.pool_shape + (input_shape[2][-1],)
 
 
 ############################################################
@@ -550,12 +889,12 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     # Positive ROIs
     positive_count = int(config.TRAIN_ROIS_PER_IMAGE *
                          config.ROI_POSITIVE_RATIO)
-    positive_indices = tf.random_shuffle(positive_indices)[:positive_count]
+    positive_indices = tf.random.shuffle(positive_indices)[:positive_count]
     positive_count = tf.shape(positive_indices)[0]
     # Negative ROIs. Add enough to maintain positive:negative ratio.
     r = 1.0 / config.ROI_POSITIVE_RATIO
     negative_count = tf.cast(r * tf.cast(positive_count, tf.float32), tf.int32) - positive_count
-    negative_indices = tf.random_shuffle(negative_indices)[:negative_count]
+    negative_indices = tf.random.shuffle(negative_indices)[:negative_count]
     # Gather selected ROIs
     positive_rois = tf.gather(proposals, positive_indices)
     negative_rois = tf.gather(proposals, negative_indices)
@@ -564,8 +903,8 @@ def detection_targets_graph(proposals, gt_class_ids, gt_boxes, gt_masks, config)
     positive_overlaps = tf.gather(overlaps, positive_indices)
     roi_gt_box_assignment = tf.cond(
         tf.greater(tf.shape(positive_overlaps)[1], 0),
-        true_fn = lambda: tf.argmax(positive_overlaps, axis=1),
-        false_fn = lambda: tf.cast(tf.constant([]),tf.int64)
+        true_fn=lambda: tf.argmax(positive_overlaps, axis=1),
+        false_fn=lambda: tf.cast(tf.constant([]), tf.int64)
     )
     roi_gt_boxes = tf.gather(gt_boxes, roi_gt_box_assignment)
     roi_gt_class_ids = tf.gather(gt_class_ids, roi_gt_box_assignment)
@@ -717,15 +1056,15 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     # Filter out low confidence boxes
     if config.DETECTION_MIN_CONFIDENCE:
         conf_keep = tf.where(class_scores >= config.DETECTION_MIN_CONFIDENCE)[:, 0]
-        keep = tf.sets.set_intersection(tf.expand_dims(keep, 0),
-                                        tf.expand_dims(conf_keep, 0))
-        keep = tf.sparse_tensor_to_dense(keep)[0]
+        keep = tf.sets.intersection(tf.expand_dims(keep, 0),
+                                    tf.expand_dims(conf_keep, 0))
+        keep = tf.sparse.to_dense(keep)[0]
 
     # Apply per-class NMS
     # 1. Prepare variables
     pre_nms_class_ids = tf.gather(class_ids, keep)
     pre_nms_scores = tf.gather(class_scores, keep)
-    pre_nms_rois = tf.gather(refined_rois,   keep)
+    pre_nms_rois = tf.gather(refined_rois, keep)
     unique_pre_nms_class_ids = tf.unique(pre_nms_class_ids)[0]
 
     def nms_keep_map(class_id):
@@ -734,10 +1073,10 @@ def refine_detections_graph(rois, probs, deltas, window, config):
         ixs = tf.where(tf.equal(pre_nms_class_ids, class_id))[:, 0]
         # Apply NMS
         class_keep = tf.image.non_max_suppression(
-                tf.gather(pre_nms_rois, ixs),
-                tf.gather(pre_nms_scores, ixs),
-                max_output_size=config.DETECTION_MAX_INSTANCES,
-                iou_threshold=config.DETECTION_NMS_THRESHOLD)
+            tf.gather(pre_nms_rois, ixs),
+            tf.gather(pre_nms_scores, ixs),
+            max_output_size=config.DETECTION_MAX_INSTANCES,
+            iou_threshold=config.DETECTION_NMS_THRESHOLD)
         # Map indices
         class_keep = tf.gather(keep, tf.gather(ixs, class_keep))
         # Pad with -1 so returned tensors have the same shape
@@ -755,9 +1094,9 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     nms_keep = tf.reshape(nms_keep, [-1])
     nms_keep = tf.gather(nms_keep, tf.where(nms_keep > -1)[:, 0])
     # 4. Compute intersection between keep and nms_keep
-    keep = tf.sets.set_intersection(tf.expand_dims(keep, 0),
-                                    tf.expand_dims(nms_keep, 0))
-    keep = tf.sparse_tensor_to_dense(keep)[0]
+    keep = tf.sets.intersection(tf.expand_dims(keep, 0),
+                                tf.expand_dims(nms_keep, 0))
+    keep = tf.sparse.to_dense(keep)[0]
     # Keep top detections
     roi_count = config.DETECTION_MAX_INSTANCES
     class_scores_keep = tf.gather(class_scores, keep)
@@ -769,9 +1108,9 @@ def refine_detections_graph(rois, probs, deltas, window, config):
     # Coordinates are normalized.
     detections = tf.concat([
         tf.gather(refined_rois, keep),
-        tf.to_float(tf.gather(class_ids, keep))[..., tf.newaxis],
+        tf.compat.v1.to_float(tf.gather(class_ids, keep))[..., tf.newaxis],
         tf.gather(class_scores, keep)[..., tf.newaxis]
-        ], axis=1)
+    ], axis=1)
 
     # Pad with zeros if detections < DETECTION_MAX_INSTANCES
     gap = config.DETECTION_MAX_INSTANCES - tf.shape(detections)[0]
@@ -1015,7 +1354,7 @@ def smooth_l1_loss(y_true, y_pred):
     """
     diff = K.abs(y_true - y_pred)
     less_than_one = K.cast(K.less(diff, 1.0), "float32")
-    loss = (less_than_one * 0.5 * diff**2) + (1 - less_than_one) * (diff - 0.5)
+    loss = (less_than_one * 0.5 * diff ** 2) + (1 - less_than_one) * (diff - 0.5)
     return loss
 
 
@@ -1068,7 +1407,7 @@ def rpn_bbox_loss_graph(config, target_bbox, rpn_match, rpn_bbox):
                                    config.IMAGES_PER_GPU)
 
     loss = smooth_l1_loss(target_bbox, rpn_bbox)
-    
+
     loss = K.switch(tf.size(loss) > 0, K.mean(loss), tf.constant(0.0))
     return loss
 
@@ -1326,9 +1665,9 @@ def build_detection_targets(rpn_rois, gt_class_ids, gt_boxes, gt_masks, config):
 
     # Compute areas of ROIs and ground truth boxes.
     rpn_roi_area = (rpn_rois[:, 2] - rpn_rois[:, 0]) * \
-        (rpn_rois[:, 3] - rpn_rois[:, 1])
+                   (rpn_rois[:, 3] - rpn_rois[:, 1])
     gt_box_area = (gt_boxes[:, 2] - gt_boxes[:, 0]) * \
-        (gt_boxes[:, 3] - gt_boxes[:, 1])
+                  (gt_boxes[:, 3] - gt_boxes[:, 1])
 
     # Compute overlaps [rpn_rois, gt_boxes]
     overlaps = np.zeros((rpn_rois.shape[0], gt_boxes.shape[0]))
@@ -1496,7 +1835,7 @@ def build_rpn_targets(image_shape, anchors, gt_class_ids, gt_boxes, config):
     rpn_match[(anchor_iou_max < 0.3) & (no_crowd_bool)] = -1
     # 2. Set an anchor for each GT box (regardless of IoU value).
     # If multiple anchors have the same IoU match all of them
-    gt_iou_argmax = np.argwhere(overlaps == np.max(overlaps, axis=0))[:,0]
+    gt_iou_argmax = np.argwhere(overlaps == np.max(overlaps, axis=0))[:, 0]
     rpn_match[gt_iou_argmax] = 1
     # 3. Set anchors with high overlap as positive.
     rpn_match[anchor_iou_max >= 0.7] = 1
@@ -1699,14 +2038,14 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
             # If the image source is not to be augmented pass None as augmentation
             if dataset.image_info[image_id]['source'] in no_augmentation_sources:
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
-                load_image_gt(dataset, config, image_id, augment=augment,
-                              augmentation=None,
-                              use_mini_mask=config.USE_MINI_MASK)
+                    load_image_gt(dataset, config, image_id, augment=augment,
+                                  augmentation=None,
+                                  use_mini_mask=config.USE_MINI_MASK)
             else:
                 image, image_meta, gt_class_ids, gt_boxes, gt_masks = \
                     load_image_gt(dataset, config, image_id, augment=augment,
-                                augmentation=augmentation,
-                                use_mini_mask=config.USE_MINI_MASK)
+                                  augmentation=augmentation,
+                                  use_mini_mask=config.USE_MINI_MASK)
 
             # Skip images that have no instances. This can happen in cases
             # where we train on a subset of classes and the image doesn't
@@ -1723,7 +2062,7 @@ def data_generator(dataset, config, shuffle=True, augment=False, augmentation=No
                 rpn_rois = generate_random_rois(
                     image.shape, random_rois, gt_class_ids, gt_boxes)
                 if detection_targets:
-                    rois, mrcnn_class_ids, mrcnn_bbox, mrcnn_mask =\
+                    rois, mrcnn_class_ids, mrcnn_bbox, mrcnn_mask = \
                         build_detection_targets(
                             rpn_rois, gt_class_ids, gt_boxes, gt_masks, config)
 
@@ -1823,7 +2162,7 @@ class MaskRCNN():
     The actual Keras model is in the keras_model property.
     """
 
-    def __init__(self, mode, config, model_dir):
+    def __init__(self, mode, config, model_dir, unique_log_name=True):
         """
         mode: Either "training" or "inference"
         config: A Sub-class of the Config class
@@ -1833,7 +2172,7 @@ class MaskRCNN():
         self.mode = mode
         self.config = config
         self.model_dir = model_dir
-        self.set_log_dir()
+        self.set_log_dir(unique_log_name=unique_log_name)
         self.keras_model = self.build(mode=mode, config=config)
 
     def build(self, mode, config):
@@ -1846,7 +2185,7 @@ class MaskRCNN():
 
         # Image size must be dividable by 2 multiple times
         h, w = config.IMAGE_SHAPE[:2]
-        if h / 2**6 != int(h / 2**6) or w / 2**6 != int(w / 2**6):
+        if h / 2 ** 6 != int(h / 2 ** 6) or w / 2 ** 6 != int(w / 2 ** 6):
             raise Exception("Image size must be dividable by 2 at least 6 times "
                             "to avoid fractions when downscaling and upscaling."
                             "For example, use 256, 320, 384, 448, 512, ... etc. ")
@@ -1897,8 +2236,14 @@ class MaskRCNN():
             _, C2, C3, C4, C5 = config.BACKBONE(input_image, stage5=True,
                                                 train_bn=config.TRAIN_BN)
         else:
-            _, C2, C3, C4, C5 = resnet_graph(input_image, config.BACKBONE,
-                                             stage5=True, train_bn=config.TRAIN_BN)
+            if config.BACKBONE == 'fusenet':
+                _, C2, C3, C4, C5 = fusenet_graph(input_image=input_image, dropout_rate=config.DROPOUT_RATE,
+                                                  n_filters=config.NUM_FILTERS, kernel_sizes=config.KERNEL_SIZE)
+            else:
+                _, C2, C3, C4, C5 = resnet_parallel_graph(input_image, config.BACKBONE,
+                                                          stage5=True, train_bn=config.TRAIN_BN,
+                                                          parallel=config.PARALLEL_BACKBONE,
+                                                          dropout_rate=config.DROPOUT_RATE)
         # Top-down Layers
         # TODO: add assert to varify feature map sizes match what's in config
         P5 = KL.Conv2D(config.TOP_DOWN_PYRAMID_SIZE, (1, 1), name='fpn_c5p5')(C5)
@@ -1956,7 +2301,7 @@ class MaskRCNN():
         # Generate proposals
         # Proposals are [batch, N, (y1, x1, y2, x2)] in normalized coordinates
         # and zero padded.
-        proposal_count = config.POST_NMS_ROIS_TRAINING if mode == "training"\
+        proposal_count = config.POST_NMS_ROIS_TRAINING if mode == "training" \
             else config.POST_NMS_ROIS_INFERENCE
         rpn_rois = ProposalLayer(
             proposal_count=proposal_count,
@@ -1969,7 +2314,7 @@ class MaskRCNN():
             # came from.
             active_class_ids = KL.Lambda(
                 lambda x: parse_image_meta_graph(x)["active_class_ids"]
-                )(input_image_meta)
+            )(input_image_meta)
 
             if not config.USE_RPN_ROIS:
                 # Ignore predicted ROIs and use ROIs provided as an input.
@@ -1985,13 +2330,13 @@ class MaskRCNN():
             # Subsamples proposals and generates target outputs for training
             # Note that proposal class IDs, gt_boxes, and gt_masks are zero
             # padded. Equally, returned rois and targets are zero padded.
-            rois, target_class_ids, target_bbox, target_mask =\
+            rois, target_class_ids, target_bbox, target_mask = \
                 DetectionTargetLayer(config, name="proposal_targets")([
                     target_rois, input_gt_class_ids, gt_boxes, input_gt_masks])
 
             # Network Heads
             # TODO: verify that this handles zero padded ROIs
-            mrcnn_class_logits, mrcnn_class, mrcnn_bbox =\
+            mrcnn_class_logits, mrcnn_class, mrcnn_bbox = \
                 fpn_classifier_graph(rois, mrcnn_feature_maps, input_image_meta,
                                      config.POOL_SIZE, config.NUM_CLASSES,
                                      train_bn=config.TRAIN_BN,
@@ -2031,7 +2376,7 @@ class MaskRCNN():
         else:
             # Network Heads
             # Proposal classifier and BBox regressor heads
-            mrcnn_class_logits, mrcnn_class, mrcnn_bbox =\
+            mrcnn_class_logits, mrcnn_class, mrcnn_bbox = \
                 fpn_classifier_graph(rpn_rois, mrcnn_feature_maps, input_image_meta,
                                      config.POOL_SIZE, config.NUM_CLASSES,
                                      train_bn=config.TRAIN_BN,
@@ -2053,7 +2398,7 @@ class MaskRCNN():
 
             model = KM.Model([input_image, input_image_meta, input_anchors],
                              [detections, mrcnn_class, mrcnn_bbox,
-                                 mrcnn_mask, rpn_rois, rpn_class, rpn_bbox],
+                              mrcnn_mask, rpn_rois, rpn_class, rpn_bbox],
                              name='mask_rcnn')
 
         # Add multi-GPU support.
@@ -2119,7 +2464,7 @@ class MaskRCNN():
         # In multi-GPU training, we wrap the model. Get layers
         # of the inner model because they have the weights.
         keras_model = self.keras_model
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model")\
+        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") \
             else keras_model.layers
 
         # Exclude some layers
@@ -2134,15 +2479,15 @@ class MaskRCNN():
             f.close()
 
         # Update the log directory
-        self.set_log_dir(filepath)
+        self.set_log_dir(filepath, True)
 
     def get_imagenet_weights(self):
         """Downloads ImageNet trained weights from Keras.
         Returns path to weights file.
         """
         from keras.utils.data_utils import get_file
-        TF_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/'\
-                                 'releases/download/v0.2/'\
+        TF_WEIGHTS_PATH_NO_TOP = 'https://github.com/fchollet/deep-learning-models/' \
+                                 'releases/download/v0.2/' \
                                  'resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5'
         weights_path = get_file('resnet50_weights_tf_dim_ordering_tf_kernels_notop.h5',
                                 TF_WEIGHTS_PATH_NO_TOP,
@@ -2155,25 +2500,29 @@ class MaskRCNN():
         metrics. Then calls the Keras compile() function.
         """
         # Optimizer object
-        optimizer = keras.optimizers.SGD(
-            lr=learning_rate, momentum=momentum,
-            clipnorm=self.config.GRADIENT_CLIP_NORM)
+        if self.config.OPTIMIZER == "ADAM":
+            optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
+        else:  # SGD
+            optimizer = keras.optimizers.SGD(
+                lr=learning_rate, momentum=momentum,
+                clipnorm=self.config.GRADIENT_CLIP_NORM)
         # Add Losses
         # First, clear previously set losses to avoid duplication
         self.keras_model._losses = []
         self.keras_model._per_input_losses = {}
         loss_names = [
-            "rpn_class_loss",  "rpn_bbox_loss",
+            "rpn_class_loss", "rpn_bbox_loss",
             "mrcnn_class_loss", "mrcnn_bbox_loss", "mrcnn_mask_loss"]
+
         for name in loss_names:
             layer = self.keras_model.get_layer(name)
-            if layer.output in self.keras_model.losses:
-                continue
+            # incompatible with tf 2:
+            # if layer.output in self.keras_model.losses:
+            #     continue
             loss = (
-                tf.reduce_mean(layer.output, keepdims=True)
-                * self.config.LOSS_WEIGHTS.get(name, 1.))
+                    tf.reduce_mean(layer.output, keepdims=True)
+                    * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.add_loss(loss)
-
         # Add L2 Regularization
         # Skip gamma and beta weights of batch normalization layers.
         reg_losses = [
@@ -2188,14 +2537,15 @@ class MaskRCNN():
             loss=[None] * len(self.keras_model.outputs))
 
         # Add metrics for losses
+        self.keras_model.metrics_tensors = []
         for name in loss_names:
             if name in self.keras_model.metrics_names:
                 continue
             layer = self.keras_model.get_layer(name)
             self.keras_model.metrics_names.append(name)
             loss = (
-                tf.reduce_mean(layer.output, keepdims=True)
-                * self.config.LOSS_WEIGHTS.get(name, 1.))
+                    tf.reduce_mean(layer.output, keepdims=True)
+                    * self.config.LOSS_WEIGHTS.get(name, 1.))
             self.keras_model.metrics_tensors.append(loss)
 
     def set_trainable(self, layer_regex, keras_model=None, indent=0, verbose=1):
@@ -2210,7 +2560,7 @@ class MaskRCNN():
 
         # In multi-GPU training, we wrap the model. Get layers
         # of the inner model because they have the weights.
-        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model")\
+        layers = keras_model.inner_model.layers if hasattr(keras_model, "inner_model") \
             else keras_model.layers
 
         for layer in layers:
@@ -2235,7 +2585,7 @@ class MaskRCNN():
                 log("{}{:20}   ({})".format(" " * indent, layer.name,
                                             layer.__class__.__name__))
 
-    def set_log_dir(self, model_path=None):
+    def set_log_dir(self, model_path=None, unique_log_name=True):
         """Sets the model log directory and epoch counter.
 
         model_path: If None, or a format different from what this code uses
@@ -2264,8 +2614,11 @@ class MaskRCNN():
                 print('Re-starting from epoch %d' % self.epoch)
 
         # Directory for training logs
-        self.log_dir = os.path.join(self.model_dir, "{}{:%Y%m%dT%H%M}".format(
-            self.config.NAME.lower(), now))
+        if unique_log_name:
+            self.log_dir = os.path.join(self.model_dir, "{}{:%Y%m%dT%H%M}".format(
+                self.config.NAME.lower(), now))
+        else:
+            self.log_dir = self.model_dir
 
         # Path to save after each epoch. Include placeholders that get filled by Keras.
         self.checkpoint_path = os.path.join(self.log_dir, "mask_rcnn_{}_*epoch*.h5".format(
@@ -2474,7 +2827,7 @@ class MaskRCNN():
             # Convert neural network mask to full size mask
             full_mask = utils.unmold_mask(masks[i], boxes[i], original_image_shape)
             full_masks.append(full_mask)
-        full_masks = np.stack(full_masks, axis=-1)\
+        full_masks = np.stack(full_masks, axis=-1) \
             if full_masks else np.empty(original_image_shape[:2] + (0,))
 
         return boxes, class_ids, scores, full_masks
@@ -2506,7 +2859,7 @@ class MaskRCNN():
         # All images in a batch MUST be of the same size
         image_shape = molded_images[0].shape
         for g in molded_images[1:]:
-            assert g.shape == image_shape,\
+            assert g.shape == image_shape, \
                 "After resizing, all images must have the same size. Check IMAGE_RESIZE_MODE and image sizes."
 
         # Anchors
@@ -2520,12 +2873,12 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, _, _, mrcnn_mask, _, _, _ =\
+        detections, _, _, mrcnn_mask, _, _, _ = \
             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
         # Process detections
         results = []
         for i, image in enumerate(images):
-            final_rois, final_class_ids, final_scores, final_masks =\
+            final_rois, final_class_ids, final_scores, final_masks = \
                 self.unmold_detections(detections[i], mrcnn_mask[i],
                                        image.shape, molded_images[i].shape,
                                        windows[i])
@@ -2552,7 +2905,7 @@ class MaskRCNN():
         masks: [H, W, N] instance binary masks
         """
         assert self.mode == "inference", "Create model in inference mode."
-        assert len(molded_images) == self.config.BATCH_SIZE,\
+        assert len(molded_images) == self.config.BATCH_SIZE, \
             "Number of images must be equal to BATCH_SIZE"
 
         if verbose:
@@ -2577,13 +2930,13 @@ class MaskRCNN():
             log("image_metas", image_metas)
             log("anchors", anchors)
         # Run object detection
-        detections, _, _, mrcnn_mask, _, _, _ =\
+        detections, _, _, mrcnn_mask, _, _, _ = \
             self.keras_model.predict([molded_images, image_metas, anchors], verbose=0)
         # Process detections
         results = []
         for i, image in enumerate(molded_images):
             window = [0, 0, image.shape[0], image.shape[1]]
-            final_rois, final_class_ids, final_scores, final_masks =\
+            final_rois, final_class_ids, final_scores, final_masks = \
                 self.unmold_detections(detections[i], mrcnn_mask[i],
                                        image.shape, molded_images[i].shape,
                                        window)
@@ -2737,12 +3090,12 @@ def compose_image_meta(image_id, original_image_shape, image_shape,
         where not all classes are present in all datasets.
     """
     meta = np.array(
-        [image_id] +                  # size=1
+        [image_id] +  # size=1
         list(original_image_shape) +  # size=3
-        list(image_shape) +           # size=3
-        list(window) +                # size=4 (y1, x1, y2, x2) in image cooredinates
-        [scale] +                     # size=1
-        list(active_class_ids)        # size=num_classes
+        list(image_shape) +  # size=3
+        list(window) +  # size=4 (y1, x1, y2, x2) in image cooredinates
+        [scale] +  # size=1
+        list(active_class_ids)  # size=num_classes
     )
     return meta
 

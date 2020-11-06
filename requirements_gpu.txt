@@ -5,7 +5,7 @@ cython
 matplotlib
 scikit-image
 tensorflow
-
+tensorflow-gpu
 keras
 opencv-python
 h5py
