@@ -35,7 +35,7 @@ from samples.elevator.elevator_rgb import ElevatorRGBConfig, ElevatorRGBDataset
 from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDataset
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 from samples.elevator.elevator_rgbd_fusenet import ElevatorRGBDFusenetConfig, ElevatorRGBDFusenetDataset
-
+import skimage.io
 import matplotlib.pyplot as plt
 
 
@@ -94,13 +94,13 @@ def visualize_activations(config, model_dir, model_path, dataset_val):
                               model_dir=model_dir)
     model.load_weights(model_path, by_name=True)
     print(model.keras_model.summary())
-
-    image_ids = np.random.choice(dataset_val.image_ids, 1)
+    i = 0
+    image_ids = np.random.choice(dataset_val.image_ids, 10)
     for image_id in image_ids:
         image, image_meta, gt_class_id, gt_bbox, gt_mask = \
             modellib.load_image_gt(dataset_val, config,
                                    image_id, use_mini_mask=False)
-
+        """
         activations = model.run_graph([image], [
             ("input_image", tf.identity(model.keras_model.get_layer("input_image").output)),
             ("res2c_out", model.keras_model.get_layer("res2c_out").output),
@@ -110,19 +110,46 @@ def visualize_activations(config, model_dir, model_path, dataset_val):
             ("rpn_bbox", model.keras_model.get_layer("rpn_bbox").output),
             ("roi", model.keras_model.get_layer("ROI").output),
         ])
+        """
+
+        activations = model.run_graph([image], [
+            ("input_image", tf.identity(model.keras_model.get_layer("input_image").output)),
+            ("relu3fsn_branchrgb", model.keras_model.get_layer("relu3fsn_branchrgb").output),
+            ("relu4fsn_branchrgb", model.keras_model.get_layer("relu4fsn_branchrgb").output),
+            ("relu5cbr3_branchdpt", model.keras_model.get_layer("relu5cbr3_branchdpt").output),
+            ("pl5pool_branchrgb", model.keras_model.get_layer("pl5pool_branchrgb").output),
+            ("rpn_bbox", model.keras_model.get_layer("rpn_bbox").output),
+            ("roi", model.keras_model.get_layer("ROI").output),
+        ])
 
         # Backbone feature map
 
-        display_images(highlight(image, np.transpose(activations["res2c_out"][0, :, :, :4], [2, 0, 1])), cols=4)
-        display_images(highlight(image, np.transpose(activations["res3c_out"][0, :, :, :4], [2, 0, 1])), cols=4)
-        display_images(highlight(image, np.transpose(activations["res4c_out"][0, :, :, :4], [2, 0, 1])), cols=4)
-        display_images(highlight(image, np.transpose(activations["res5c_out"][0, :, :, :4], [2, 0, 1])), cols=4)
+        display_images(np.transpose(activations["relu3fsn_branchrgb"][0, :, :, :4], [2, 0, 1]), cols=4)
+        display_images(np.transpose(activations["relu4fsn_branchrgb"][0, :, :, :4], [2, 0, 1]), cols=4)
+        display_images(np.transpose(activations["relu5cbr3_branchdpt"][0, :, :, :4], [2, 0, 1]), cols=4)
+        display_images(np.transpose(activations["pl5pool_branchrgb"][0, :, :, :4], [2, 0, 1]), cols=4)
+
+        activation = activations["relu4fsn_branchrgb"][0, :, :, 3]
+        print(activation.shape)
+        rgb_image = image[:, :, 0:3]
+        dpt_image = image[:, :, 3]
+        resized = cv2.resize(activation, (512, 512))
+        cv2.normalize(resized, resized, 255, 0, cv2.NORM_MINMAX)
+        resized = np.uint8(resized)
+        resized_activation = cv2.applyColorMap(resized, cv2.COLORMAP_WINTER)
+
+        skimage.io.imsave("sun_" + str(i) + "_act.png", resized_activation)
+        skimage.io.imsave("sun_" + str(i) + "_rgb.png", rgb_image)
+        skimage.io.imsave("sun_" + str(i) + "_dpt.png", dpt_image)
+
         cv2.waitKey(0)
+        i += 1
 
 
 def highlight(image, activations):
     highlighted_arr = []
     for activation in activations:
+
         resized = cv2.resize(activation, (512, 512))
         cv2.normalize(resized, resized, 255, 0, cv2.NORM_MINMAX)
         resized = np.uint8(resized)
@@ -227,26 +254,31 @@ def main(data_set, strategy, data_dir, model_dir, model_name, backbone):
     config.BACKBONE = backbone
     config.BATCH_SIZE = 1
     config.IMAGES_PER_GPU = 1
-
+    config.NUM_FILTERS = [32, 32, 64, 128, 256]
+    config.DETECTION_MIN_CONFIDENCE = 0.8
+    config.TRAIN_ROIS_PER_IMAGE = 50
+    config.DROPOUT_RATE = -1
     config.display()
 
     visualize_filters(config=config, model_dir=model_dir, model_path=model_name)
 
-    visualize_activations(config=config, model_dir=model_dir, model_path=model_name, dataset_val=dataset_val)
+    # visualize_activations(config=config, model_dir=model_dir, model_path=model_name, dataset_val=dataset_val)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
-                        default=os.path.abspath(
-                            "C:\\Users\p41929\\_Master Thesis\\Mask_RCNN\\datasets\\elevator\\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                        default=os.path.abspath("D:/Data/sun_rgbd/crop"))
+    # ROOT_DIR,
+    # "datasets\\elevator\\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
                         default="RGB")
-    parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="ELEVATOR")
+    parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
     args = parser.parse_args()
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir,
-         model_name=args.model_dir + "elevator_rgb20200525T1054/mask_rcnn_elevator_rgb_0001.h5",
-         backbone="resnet101")
+         model_name=os.path.join(ROOT_DIR, "logs/weights/mask_rcnn_sunrgb_0050.h5"),
+         #"D:/train_logs/sun/sunrgbd_fusenet20200716T0034/mask_rcnn_sunrgbd_fusenet_0300.h5",
+         backbone="resnet50")
