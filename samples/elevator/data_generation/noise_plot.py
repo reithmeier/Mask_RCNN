@@ -9,13 +9,10 @@
 
 
 import argparse
-import json
 import os
 
 import numpy as np
-import skimage.io
 from matplotlib import pyplot as plt
-import  matplotlib
 
 ROOT_DIR = os.path.abspath("./../../..")
 
@@ -40,18 +37,11 @@ def read_all_images():
             if not file.endswith(".npy"):
                 continue
             image = np.load(args.input + "/" + file)
-            #fig = skimage.io.imshow(image)
-            #fig.axes.get_xaxis().set_visible(False)
-            #fig.axes.get_yaxis().set_visible(False)
-            #plt.show()
             image = image.flatten()
             images.append(image)
-            # Creating plot
-            # plt.boxplot(image)
-            # show plot
-            # plt.show()
 
     return np.array(images)
+
 
 def hist(arr, i):
     with plt.style.context('ggplot'):
@@ -63,6 +53,7 @@ def hist(arr, i):
     from tikzplotlib import save as tikz_save
     tikz_save(f"noise_dist_{i}.tex")
     plt.show()
+
 
 def main():
     images = read_all_images()

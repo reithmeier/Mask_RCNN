@@ -1,8 +1,16 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     29.09.2020
+#
+# **********************************************************************************************************************
+
+
 from matplotlib import pyplot as plt
 import pandas as pd
 from tikzplotlib import save as tikz_save
-import matplotlib
-#matplotlib.use('pgf')
 
 SMALL_SIZE = 14
 MEDIUM_SIZE = 16
@@ -39,7 +47,6 @@ def plot_precision_recall_curves(precissions_rgb, recalls_rgb, precisions_d3, re
 
     ax.set_xlabel("Recall")
     ax.set_ylabel("Precission")
-    #ax.set_xlim(0., 1.)
     ax.set_ylim(0., 1.05)
     ax.legend()
     tikz_save("precision_recall_elevator.tex")

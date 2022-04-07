@@ -50,6 +50,6 @@ This repository contains functionality to process the Sun RGB-D Dataset and the 
 * Each sample subdirectory contains jupyter notebooks for inspection and training 
 of the datasets and models. These can be used for visual confirmation.
 * To perform a hyper parameter optimization use [hyper_parameter_optimization.py](samples/hyper_parameter_optimization.py)
-* To plot the results of the hyper parameter optimization use  [plot_hyper_param_results.py](samples/plot_hyper_param_results.py)
+* To plot the results of the hyper parameter optimization use  [plot_hyper_param_results.py](samples/result_visualisation/plot_hyper_param_results.py)
 * To perform a training of a single model use [training_strategy.py](samples/training_strategy.py)
 

@@ -1,3 +1,11 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     25.08.2020
+#
+# **********************************************************************************************************************
 
 
 import matplotlib.pyplot as plt
@@ -28,10 +36,9 @@ def get_trend(x, y):
     return p
 
 
-sun = pd.read_csv("C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-elevator_rgb20200814T1255_train-tag-epoch_loss.csv")
-coco = pd.read_csv("C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\pretraining\\run-elevator_rgb20200815T1221_train-tag-epoch_loss.csv")
-none = pd.read_csv("C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\pretraining\\run-elevator_rgb20200815T0733_train-tag-epoch_loss.csv")
-
+sun = pd.read_csv("run-sun_rgb_train-tag-epoch_loss.csv")
+coco = pd.read_csv("run-coco_train-tag-epoch_loss.csv")
+none = pd.read_csv("run-elevator_train-tag-epoch_loss.csv")
 
 
 training = pd.DataFrame(columns=[ "no pre-training", "SUN RGB-D", "MS COCO"])

@@ -1,19 +1,18 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script visualize samples of the elevator dataset
+#
+# author:   Lukas Reithmeier
+# date:     31.07.2020
+#
+# **********************************************************************************************************************
+
+
 import os
 import sys
-import itertools
-import math
-import logging
-import json
-import re
-import random
 import argparse
-from collections import OrderedDict
 import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.lines as lines
-from matplotlib.patches import Polygon
 import skimage.io
 
 # Root directory of the project
@@ -21,11 +20,8 @@ ROOT_DIR = os.path.abspath("../../../")
 
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn.config import Config
 from mrcnn import utils
 from mrcnn import visualize
-from mrcnn.visualize import display_images
-import mrcnn.model as modellib
 from mrcnn.model import log
 
 from samples.elevator import elevator_rgbd

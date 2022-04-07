@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     16.08.2020
+#
+# **********************************************************************************************************************
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -24,13 +34,13 @@ def get_trend(x, y):
 
 
 sgd_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sgd_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 adam_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer\\run-sunrgb20200814T2139_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 adam_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer\\run-sunrgb20200814T2139_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 
 print(sgd_tra)
 print(sgd_val)
@@ -73,5 +83,4 @@ ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05),
           ncol=3, fancybox=True, shadow=False)
 ax.set_xlabel("epochs")
 ax.set_ylabel("validation loss")
-# ax.set_yscale("log")
 plt.show()

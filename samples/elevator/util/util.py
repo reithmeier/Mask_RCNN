@@ -13,18 +13,6 @@ import json
 import numpy as np
 import skimage.draw
 
-if __name__ == "__main__":
-    # sometimes a rare bug occurs, don't know why
-    # g_c = np.array([203, 249, 239])
-    # g_r = np.array([146, 165, 117])
-    # skimage.draw.polygon(g_r, g_c)
-    g_r = np.array([1, 2, 8])
-    g_c = np.array([1, 7, 4])
-    g_rr, g_cc = skimage.draw.polygon(g_r, g_c)
-
-    # leads to:
-    # TypeError: int() argument must be a string, a bytes-like object or a number, not '_NoValueType'
-
 
 def draw_polygon(polygon, width, height):
     y_values = np.array([p[0] * width / 100 for p in polygon])

@@ -15,3 +15,6 @@ pillow
 pyrealsense2
 hyperopt
 joblib
+pandas
+seaborn
+tikzplotlib

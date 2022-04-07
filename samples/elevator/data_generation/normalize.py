@@ -19,8 +19,6 @@ from matplotlib import pyplot as plt
 ROOT_DIR = os.path.abspath("./../../..")
 
 
-
-
 def normalize(arr):
     min = np.min(arr)
     print(min.shape)
@@ -31,6 +29,7 @@ def normalize(arr):
     res = diff / max * 255
     print(res.shape)
     return res
+
 
 def main():
     image = skimage.io.imread(args.input)
@@ -45,7 +44,7 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, help="Path of the input",
-                        default="D:\\Data\\elevator\\20181008_105503\\out\\depth\\20181008_105503_000003.png")
+                        default="./out.png")
 
     args = parser.parse_args()
     main()

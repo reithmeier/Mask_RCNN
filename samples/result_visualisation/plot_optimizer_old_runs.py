@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the old optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     25.08.2020
+#
+# **********************************************************************************************************************
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -23,25 +33,21 @@ def get_trend(x, y):
     return p
 
 sgd_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sgd_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 sgd_old_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-sunrgb20200704T1912_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sgd_old_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-sunrgb20200704T1912_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 adam_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-additional_sunrgb20200706T1041_train-tag-epoch_loss.csv")
+    "run-additional_sunrgb_train-tag-epoch_loss.csv")
 adam_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-additional_sunrgb20200706T1041_validation-tag-epoch_loss.csv")
+    "run-additional_sunrgb_validation-tag-epoch_loss.csv")
 
 sgd_old_tra = sgd_old_tra.head(300)
 sgd_old_val = sgd_old_val.head(300)
 
-#sgd_old_tra = sgd_old_tra.groupby(np.arange(len(sgd_old_tra)) // 6).mean()
-#sgd_old_val = sgd_old_val.groupby(np.arange(len(sgd_old_val)) // 6).mean()
-#adam_tra = adam_tra.groupby(np.arange(len(adam_tra)) // 6).mean()
-#adam_val = adam_val.groupby(np.arange(len(adam_val)) // 6).mean()
 print(sgd_old_tra)
 print(sgd_old_val)
 print(sgd_tra)
@@ -74,7 +80,6 @@ validation_moving["index"] = validation['index']
 sgd_trend = get_trend(validation["index"], validation["SGD"])
 adam_trend = get_trend(validation["index"], validation["ADAM"])
 
-#x = validation["index"]
 fig, ax = plt.subplots()
 
 x = validation_moving["index"].tail(250)
@@ -88,13 +93,11 @@ ax.plot(x, adam_trend(x), "--", label="ADAM trend")
 
 print(sgd_trend(validation["index"]))
 ax.legend()
-#ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05),
-#          ncol=3, fancybox=True, shadow=False)
 ax.set_xlabel("epochs")
 ax.set_ylabel("validation loss")
 ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05),
           ncol=3, fancybox=True, shadow=False)
-# ax.set_yscale("log")
+
 from tikzplotlib import save as tikz_save
 tikz_save("train_runs_sgd_vs_adam_tr_val.tex")
 plt.show()

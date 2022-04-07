@@ -22,10 +22,10 @@ from samples.sun.sunrgbd_fusenet import SunRGBDFusenetConfig, SunRGBDFusenetData
 from samples.sun.sunrgbd_parallel import SunRGBDParallelConfig, SunRGBDParallelDataset
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("../")
+ROOT_DIR = os.path.abspath("../../")
 
 # Import Mask RCNN
-sys.path.append('.')
+sys.path.append('..')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 import mrcnn.model as modellib
 from mrcnn.visualize import display_images
@@ -47,8 +47,6 @@ def visualize_filters(config, model_dir, model_path):
     print(model.keras_model.summary())
 
     for layer in model.keras_model.layers:
-        # if 'conv' not in layer.name:
-        #   continue
 
         if not ((('res' in layer.name) and ('branch' in layer.name) and layer.name[-1] == 'b')
                 or 'conv1' == layer.name):
@@ -100,17 +98,6 @@ def visualize_activations(config, model_dir, model_path, dataset_val):
         image, image_meta, gt_class_id, gt_bbox, gt_mask = \
             modellib.load_image_gt(dataset_val, config,
                                    image_id, use_mini_mask=False)
-        """
-        activations = model.run_graph([image], [
-            ("input_image", tf.identity(model.keras_model.get_layer("input_image").output)),
-            ("res2c_out", model.keras_model.get_layer("res2c_out").output),
-            ("res3c_out", model.keras_model.get_layer("res3c_out").output),
-            ("res4c_out", model.keras_model.get_layer("res4c_out").output),
-            ("res5c_out", model.keras_model.get_layer("res5c_out").output),
-            ("rpn_bbox", model.keras_model.get_layer("rpn_bbox").output),
-            ("roi", model.keras_model.get_layer("ROI").output),
-        ])
-        """
 
         activations = model.run_graph([image], [
             ("input_image", tf.identity(model.keras_model.get_layer("input_image").output)),
@@ -262,15 +249,11 @@ def main(data_set, strategy, data_dir, model_dir, model_name, backbone):
 
     visualize_filters(config=config, model_dir=model_dir, model_path=model_name)
 
-    # visualize_activations(config=config, model_dir=model_dir, model_path=model_name, dataset_val=dataset_val)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
-                        default=os.path.abspath("D:/Data/sun_rgbd/crop"))
-    # ROOT_DIR,
-    # "datasets\\elevator\\preprocessed"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                        default=os.path.abspath("../../datasets/sun_rgbd/crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
@@ -280,5 +263,4 @@ if __name__ == "__main__":
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir,
          model_name=os.path.join(ROOT_DIR, "logs/weights/mask_rcnn_sunrgb_0050.h5"),
-         #"D:/train_logs/sun/sunrgbd_fusenet20200716T0034/mask_rcnn_sunrgbd_fusenet_0300.h5",
          backbone="resnet50")

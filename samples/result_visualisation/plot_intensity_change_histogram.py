@@ -1,13 +1,20 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the intensity change histogram
+#
+# author:   Lukas Reithmeier
+# date:     25.08.2020
+#
+# **********************************************************************************************************************
+
+
 import math
 import os
 
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from skimage import data, img_as_float
 import skimage.io
-from skimage import exposure
 
 plt.style.use('ggplot')
 SMALL_SIZE = 14
@@ -37,9 +44,6 @@ def calc_diff(image1, image2, bins=255):
     hist_2_b, _ = np.histogram(image2[2].ravel(), 256, [0, 256])
 
     num_pixels_1 = (image1.shape[0] * image1.shape[1])
-    # hist_1_r = hist_1_r / num_pixels_1
-    # hist_1_g = hist_1_g / num_pixels_1
-    # hist_1_b = hist_1_b / num_pixels_1
     num_pixels_2 = (image2.shape[0] * image2.shape[1])
     hist_2_r = hist_2_r / num_pixels_2 * num_pixels_1
     hist_2_g = hist_2_g / num_pixels_2 * num_pixels_1
@@ -67,10 +71,6 @@ def plot_hist_separate(image, max_total, bins=255, ver=""):
     hist_g, _ = np.histogram(image[1].ravel(), 256, [0, 256])
     hist_b, _ = np.histogram(image[2].ravel(), 256, [0, 256])
     num_pixels = (image.shape[0] * image.shape[1])
-    # hist_r = hist_r / num_pixels
-    # hist_g = hist_g / num_pixels
-    # hist_b = hist_b / num_pixels
-    # max_total = max_total / num_pixels
 
     ax_r.plot(bins[1:], hist_r, linewidth=1, color='r')
     ax_g.plot(bins[1:], hist_g, linewidth=1, color='g')
@@ -80,20 +80,15 @@ def plot_hist_separate(image, max_total, bins=255, ver=""):
     ax_r.set_ylabel('Pixel Frequency')
     ax_r.set_title('Red Channel')
     ax_r.set_xlim(0, 255)
-    # ax_r.set_ylim(0, max_total)
-    # ax.set_yticks([])
 
     ax_g.set_xlabel('Pixel Intensity')
     ax_g.set_title('Green Channel')
     ax_g.set_xlim(0, 255)
-    # ax_g.set_ylim(0, max_total)
-    # ax_g.get_yaxis().set_visible(False)
 
     ax_b.set_xlabel('Pixel Intensity')
     ax_b.set_title('Blue Channel')
     ax_b.set_xlim(0, 255)
-    # ax_b.set_ylim(0, max_total)
-    # ax_b.get_yaxis().set_visible(False)
+
     from tikzplotlib import save as tikz_save
     tikz_save(f"hist_{ver}_1.tex")
 
@@ -107,20 +102,13 @@ def plot_hist_combined(image, max_total, nbins=256):
     hist_g, _ = np.histogram(image[1].ravel(), 256, [0, 256])
     hist_b, _ = np.histogram(image[2].ravel(), 256, [0, 256])
 
-    # ax.plot(bins[1:], hist_r, 'r', linewidth=1, label="red")
-    #ax.fill_between(bins[1:], 0, hist, facecolor='yellow', alpha=0.3, label="all")
     ax.fill_between(bins[1:], 0, hist_r, facecolor='red', alpha=0.3, label="red")
     ax.fill_between(bins[1:], 0, hist_g, facecolor='green', alpha=0.3, label="green")
     ax.fill_between(bins[1:], 0, hist_b, facecolor='blue', alpha=0.3, label="blue")
 
-    # ax.plot(bins[1:], hist_g, 'g', linewidth=1)
-    # ax.plot(bins[1:], hist_b, 'b', linewidth=1)
-
     ax.ticklabel_format(axis='y', style='scientific', scilimits=(0, 0))
     ax.set_xlabel('Pixel intensity')
     ax.set_xlim(0, nbins)
-    #ax.set_ylim(0, max_total)
-    # ax.set_yticks([])
     ax.legend()
     plt.show()
 
@@ -137,7 +125,7 @@ def plot_dpt_hist(image, nbins=256, ver=""):  # 65535):
     ax.set_xlabel('Pixel Intensity')
     ax.set_ylabel('Pixel Frequency')
     ax.set_title('Depth Image')
-    # ax.set_xlim(0, nbins)
+
     from tikzplotlib import save as tikz_save
     tikz_save(f"hist_dpt_{ver}_1.tex")
 
@@ -149,14 +137,14 @@ def all_files():
     dist_b = []
     dist_g = []
 
-    for filename in os.listdir("C:\\Users\\lukas\\Masterarbeit\\Mask_RCNN\\datasets\\elevator\\preprocessed\\rgb\\"):
+    for filename in os.listdir("/datasets/elevator/preprocessed/rgb\\"):
         print(filename)
         recording = filename.rsplit("_", 1)[0]
         file = filename.rsplit("_", 1)[1]
 
         image1 = skimage.io.imread(
-            f"C:\\Users\\lukas\\Masterarbeit\\Mask_RCNN\\datasets\\elevator\\preprocessed\\rgb\\{recording}_{file}")
-        image2 = skimage.io.imread(f"D:\\Data\\elevator\\{recording}\\out\\rgb\\{recording}_{file}")
+            f"../../datasets//elevator/preprocessed/rgb/{recording}_{file}")
+        image2 = skimage.io.imread(f"../../datasets/elevator/{recording}/out/rgb/{recording}_{file}")
 
         dr, dg, db, m = calc_diff(image1, image2)
         dist_r.append(dr)
@@ -176,23 +164,23 @@ def all_sun_files():
     dist_b = []
     dist_g = []
 
-    for filename in os.listdir("D:\\Data\\sun_rgbd\\crop\\image\\test\\"):
+    for filename in os.listdir("../../datasets/sun_rgbd/crop/image/test/"):
         print(filename)
 
         image1 = skimage.io.imread(
-            f"D:\\Data\\sun_rgbd\\crop\\image\\test\\{filename}")
-        image2 = skimage.io.imread(f"D:\\Data\\sun_rgbd\\image\\test\\{filename}")
+            f"../../datasets/sun_rgbd/crop/image/test/{filename}")
+        image2 = skimage.io.imread(f"../../datasets/sun_rgbd/image/test/{filename}")
 
         dr, dg, db, m = calc_diff(image1, image2)
         dist_r.append(dr)
         dist_g.append(dg)
         dist_b.append(db)
-    for filename in os.listdir("D:\\Data\\sun_rgbd\\crop\\image\\train\\"):
+    for filename in os.listdir("../../datasets/sun_rgbd/image/train/"):
         print(filename)
 
         image1 = skimage.io.imread(
-            f"D:\\Data\\sun_rgbd\\crop\\image\\train\\{filename}")
-        image2 = skimage.io.imread(f"D:\\Data\\sun_rgbd\\image\\train\\{filename}")
+            f"../../datasets/sun_rgbd/crop/image/train/{filename}")
+        image2 = skimage.io.imread(f"../../datasets/sun_rgbd/image/train/{filename}")
 
         dr, dg, db, m = calc_diff(image1, image2)
         dist_r.append(dr)
@@ -221,18 +209,15 @@ def plot_dpt(image):
 
 recording = "20190219_135155"
 file = "_000094"
-recording = "Intel_N_4-4_1-0_1"
-file = "_000090"
-recording = "20190219_132346"
-file = "_000047"
+
 
 image1 = skimage.io.imread(
-    f"C:\\Users\\lukas\\Masterarbeit\\Mask_RCNN\\datasets\\elevator\\preprocessed\\rgb\\{recording}{file}.jpg")
-image2 = skimage.io.imread(f"D:\\Data\\elevator\\{recording}\\out\\rgb\\{recording}{file}.jpg")
+    f"{recording}{file}.jpg")
+image2 = skimage.io.imread(f"{recording}{file}.jpg")
 dpt2 = skimage.io.imread(
-    f"D:\\Data\\elevator\\{recording}\\out\\depth\\{recording}{file}.png")
+    f"{recording}{file}.png")
 dpt1 = skimage.io.imread(
-    f"C:\\Users\\lukas\\Masterarbeit\\Mask_RCNN\\datasets\\elevator\\preprocessed\\depth\\{recording}{file}.png")
+    f"{recording}{file}.png")
 dpt1 = (dpt1 / 65535 * 255).astype(np.uint8)
 
 plot_dpt_hist(dpt1, ver="after")
@@ -242,11 +227,8 @@ plot_dpt(dpt1)
 
 dr, dg, db, m = calc_diff(image1, image2)
 
-# m = m / max(image1.shape[0]*image1.shape[1], image2.shape[0]*image2.shape[1])
 plot_hist_combined(image1, m)
 plot_hist_combined(image2, m)
 plot_hist_separate(image=image1, max_total=m, ver="after")
 plot_hist_separate(image=image2, max_total=m, ver="before")
 
-# all_files()
-# all_sun_files()

@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the old and new optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     16.08.2020
+#
+# **********************************************************************************************************************
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -23,21 +33,21 @@ def get_trend(x, y):
     return p
 
 sgd_old_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-sunrgb20200704T1912_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sgd_old_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-sunrgb20200704T1912_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 adam_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-additional_sunrgb20200706T1041_train-tag-epoch_loss.csv")
+    "run-additional_sunrgb_train-tag-epoch_loss.csv")
 adam_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer_old\\run-additional_sunrgb20200706T1041_validation-tag-epoch_loss.csv")
+    "run-additional_sunrgb_validation-tag-epoch_loss.csv")
 adam_new_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer\\run-sunrgb20200814T2139_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 adam_new_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\optimizer\\run-sunrgb20200814T2139_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 sgd_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sgd_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 
 sgd_old_tra = sgd_old_tra.head(264)
 sgd_old_val = sgd_old_val.head(264)
@@ -88,5 +98,4 @@ ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05),
           ncol=3, fancybox=True, shadow=False)
 ax.set_xlabel("epochs")
 ax.set_ylabel("validation loss")
-# ax.set_yscale("log")
 plt.show()

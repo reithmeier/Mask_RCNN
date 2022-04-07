@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot runtimes
+#
+# author:   Lukas Reithmeier
+# date:     16.08.2020
+#
+# **********************************************************************************************************************
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -18,7 +28,7 @@ plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
 plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
-FILE_DIR = os.path.abspath("C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\")
+FILE_DIR = os.path.abspath("../../")
 runtime_rgb = np.load(FILE_DIR + "/runtimes_CPU_ELEVATOR_RGB.npy").clip(min=0)
 runtime_d3 = np.load(FILE_DIR + "/runtimes_CPU_ELEVATOR_D3.npy").clip(min=0)
 runtime_rgbd = np.load(FILE_DIR + "/runtimes_CPU_ELEVATOR_RGBD.npy").clip(min=0)
@@ -44,10 +54,8 @@ data["RGBD"] = runtime_rgbd
 data["RGBD-F"] = runtime_rgbdf
 data.boxplot()
 print(data.shape)
-#ax.boxplot(data)
 
 
 ax.set_xlabel("model-version")
 ax.set_ylabel("inference time")
-# ax.set_yscale("log")
 plt.show()

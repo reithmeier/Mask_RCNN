@@ -7,17 +7,11 @@
 #
 # **********************************************************************************************************************
 
-from collections import OrderedDict
 import os
-import joblib
-import matplotlib
-import matplotlib.cm
 import matplotlib.pyplot as plt
-import numpy as np
-from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
 import pandas as pd
 
-ROOT_DIR = os.path.abspath("../")
+ROOT_DIR = os.path.abspath("../../")
 plt.style.use('ggplot')
 
 SMALL_SIZE = 14
@@ -55,7 +49,6 @@ def plot_training(rgb_file, d3_file, rgbd_file, rgbd_fusenet_file):
     plt.show()
 
 
-
 def plot_runtimes(rgb_file, d3_file, rgbd_file, rgbd_fusenet_file):
     rgb_result = pd.read_csv(rgb_file)
     d3_result = pd.read_csv(d3_file)
@@ -79,14 +72,13 @@ def plot_runtimes(rgb_file, d3_file, rgbd_file, rgbd_fusenet_file):
     plt.show()
 
 
-plot_runtimes('C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgb_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_d3_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_fusenet_res.csv')
+plot_runtimes('./hyperopt_time_rgb_res.csv',
+              './hyperopt_time_d3_res.csv',
+              './hyperopt_time_rgbd_res.csv',
+              './hyperopt_time_rgbd_fusenet_res.csv')
 
 
-
-plot_training('C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgb_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_d3_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_res.csv',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_fusenet_res.csv')
+plot_training('./hyperopt_time_rgb_res.csv',
+              './hyperopt_time_d3_res.csv',
+              './hyperopt_time_rgbd_res.csv',
+              './hyperopt_time_rgbd_fusenet_res.csv')

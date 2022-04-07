@@ -1,16 +1,18 @@
+# **********************************************************************************************************************
+#
+# brief:    script to perform inference calculation
+#
+# author:   Lukas Reithmeier
+# date:     28.08.2020
+#
+# **********************************************************************************************************************
+
+
 import argparse
-import multiprocessing
 import os
 import sys
-from collections import OrderedDict
 
-import imgaug.augmenters as iaa
-import joblib
 import numpy as np
-import tensorflow as tf
-from hyperopt import fmin, tpe, space_eval
-from hyperopt import hp, Trials
-from tensorboard.plugins.hparams import api as tbhp
 import timeit
 
 # Root directory of the project
@@ -21,7 +23,6 @@ sys.path.append('.')
 sys.path.append(ROOT_DIR)  # To find local version of the library
 import mrcnn.model as modellib
 from mrcnn import utils
-from samples.sun.sund3 import SunD3Config, SunD3Dataset
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
 from samples.sun.sunrgb import SunRGBConfig, SunRGBDataset
@@ -34,9 +35,6 @@ from samples.elevator.elevator_rgbd import ElevatorRGBDConfig, ElevatorRGBDDatas
 from samples.elevator.elevator_rgbd_parallel import ElevatorRGBDParallelConfig, ElevatorRGBDParallelDataset
 from samples.elevator.elevator_rgbd_fusenet import ElevatorRGBDFusenetConfig, ElevatorRGBDFusenetDataset
 import pandas as pd
-
-
-# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 def evaluate_pr_curve(dataset_val, inference_config, model):
@@ -71,20 +69,7 @@ def evaluate_pr_curve(dataset_val, inference_config, model):
         _, _, _, tp_fp_fn = \
             utils.compute_matches(gt_bbox, gt_class_id, gt_mask,
                                   r["rois"], r["class_ids"], r["scores"], r['masks'])
-        # print(overlaps)
-        # print("---")
         tp_fp_fns = tp_fp_fns.append(tp_fp_fn, ignore_index=True)
-        """
-        tps = tps + tp
-        fps = fps + fp
-        fns = fns + fn
-        precision = tps / (tps + fps)
-        recall = tps / (tps + fns)
-        print(tp, fp, fn, tps, fps, fns, precision, recall)
-        
-        precisions.append(precision)
-        recalls.append(recall)
-        """
 
         if i % 100 == 0:
             print(i)
@@ -97,8 +82,6 @@ def evaluate_pr_curve(dataset_val, inference_config, model):
     tp_fp_fns["acc fp"] = tp_fp_fns["fp"].expanding(1).sum()
     tp_fp_fns["acc fn"] = tp_fp_fns["fn"].expanding(1).sum()
     print(tp_fp_fns)
-    # precision = tp / (tp + fp)
-    # recall = tp / (tp + fn)
 
     tp_fp_fns["precision"] = tp_fp_fns["acc tp"] / (tp_fp_fns["acc tp"] + tp_fp_fns["acc fp"])
     tp_fp_fns["recall"] = tp_fp_fns["acc tp"] / (tp_fp_fns["acc tp"] + tp_fp_fns["acc fn"])
@@ -263,20 +246,6 @@ def main(data_dir, backbone, model_dir, model_name, data_set, strategy):
     # config.RPN_ANCHOR_SCALES = (8, 16, 32, 64, 128)
     config.display()
 
-    # dataset_tst = SunRGBDDataset()
-    # dataset_tst.load_sun_rgbd(data_dir, "split/test13")
-    # dataset_tst = SunD3Dataset()
-    # dataset_tst.load_sun_d3(data_dir, "split/test13")
-    # dataset_tst = SunRGBDataset()
-    # dataset_tst.load_sun_rgb(data_dir, "split/test13")
-    # dataset_tst = SunRGBDFusenetDataset()
-    # dataset_tst.load_sun_rgbd_fusenet(data_dir, "split/test13")
-    #dataset_tst = ElevatorRGBDataset()
-    #dataset_tst.load_elevator_rgb(data_dir, "test")
-    #dataset_tst = ElevatorD3Dataset()
-    #dataset_tst.load_elevator_d3(data_dir, "test")
-    #dataset_tst = ElevatorRGBDDataset()
-    #dataset_tst.load_elevator_rgbd(data_dir, "test")
     dataset_tst = ElevatorRGBDFusenetDataset()
     dataset_tst.load_elevator_rgbd_fusenet(data_dir, "test")
 
@@ -296,11 +265,9 @@ def main(data_dir, backbone, model_dir, model_name, data_set, strategy):
 
 
 if __name__ == "__main__":
-    # print(tf.test.is_gpu_available())
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.join(ROOT_DIR, "datasets", "elevator", "preprocessed"))
-    # os.path.abspath("D:\\Data\\sun_rgbd\\crop\\"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=os.path.join(ROOT_DIR, "logs"))
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",

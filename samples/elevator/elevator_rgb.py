@@ -417,28 +417,12 @@ def run_grid_search(data_dir, model_dir):
     result = np.zeros([len(train_rois_per_image), len(detection_min_confidence)])
 
     train_with_config(config=config, epochs=epochs, data_dir=data_dir, model_dir=model_dir)
-    """
-    i = 0
-    j = 0
-    for trpi in train_rois_per_image:
-        for dmc in detection_min_confidence:
-            print("train rois per image", trpi)
-            print("detection min confidence", dmc)
-            config.TRAIN_ROIS_PER_IMAGE = trpi
-            config.DETECTION_MIN_CONFIDENCE = dmc
-            result[i][j] = train_with_config(config=config, epochs=epochs, data_dir=data_dir, model_dir=model_dir)
-            i = i + 1
-            j = j + 1
-        j = 0
-
-    print(result)
-    """
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
-                        default=os.path.abspath("I:\Data\elevator\preprocessed"))
+                        default=os.path.abspath("../../datasets/elevator/preprocessed"))
     parser.add_argument("-m", "--model_dir", type=str, help="Input index file",
                         default=ROOT_DIR + "logs/")
     parser.add_argument("-c", "--coco_path", type=str, help="Path to pretrained coco weights",

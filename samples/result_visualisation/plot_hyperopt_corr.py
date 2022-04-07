@@ -1,12 +1,6 @@
 
-from collections import OrderedDict
 import os
-import joblib
-import matplotlib
-import matplotlib.cm
 import matplotlib.pyplot as plt
-import numpy as np
-from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_vars
 import pandas as pd
 import seaborn as sns
 
@@ -32,15 +26,14 @@ def plot_correlation(corr, ver, bb):
     print(corr)
     sns.heatmap(corr, annot=True, cmap=sns.diverging_palette(20, 220, n=256), annot_kws={"size": SMALL_SIZE})
 
-    #plt.show()
     from tikzplotlib import save as tikz_save
     tikz_save(f"hyperopt_{ver}_corr.tex")
 
 
-corr_rgb = 'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgb_res.csv.corr.csv'
-corr_d3 = 'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_d3_res.csv.corr.csv'
-corr_rgbd = 'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_res.csv.corr.csv'
-corr_rgbdf = 'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_fusenet_res.csv.corr.csv'
+corr_rgb = './hyperopt_time_rgb_res.csv.corr.csv'
+corr_d3 = './hyperopt_time_d3_res.csv.corr.csv'
+corr_rgbd = './hyperopt_time_rgbd_res.csv.corr.csv'
+corr_rgbdf = './hyperopt_time_rgbd_fusenet_res.csv.corr.csv'
 corr_rgb = pd.read_csv(corr_rgb)
 corr_d3 = pd.read_csv(corr_d3)
 corr_rgbd = pd.read_csv(corr_rgbd)

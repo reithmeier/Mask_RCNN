@@ -9,7 +9,6 @@
 
 
 import argparse
-import json
 import os
 
 import numpy as np
@@ -37,8 +36,6 @@ def read_all_images():
     return np.array(images)
 
 
-
-
 def main():
     images = read_all_images()
     print(images.shape)
@@ -63,6 +60,7 @@ def main():
     plt.boxplot(std_flat)
     # show plot
     plt.show()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot runs with small images
+#
+# author:   Lukas Reithmeier
+# date:     16.08.2020
+#
+# **********************************************************************************************************************
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -24,13 +34,13 @@ def get_trend(x, y):
 
 
 big_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 big_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\run-sunrgb20200811T2232_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 sml_tra = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\small_images\\run-sunrgb20200816T0246_train-tag-epoch_loss.csv")
+    "run-sunrgb_train-tag-epoch_loss.csv")
 sml_val = pd.read_csv(
-    "C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\training\\small_images\\run-sunrgb20200816T0246_validation-tag-epoch_loss.csv")
+    "run-sunrgb_validation-tag-epoch_loss.csv")
 
 
 print(big_tra)
@@ -55,7 +65,6 @@ rgb_trend = get_trend(validation["index"], validation["512 x 512"])
 d3_trend = get_trend(validation["index"], validation["256 x 256"])
 
 validation_avg = validation.groupby(np.arange(len(validation)) // 5).mean()
-# validation_avg["index"] = [5, 15, 25, 35, 45]
 
 validation_moving = validation.iloc[:, :].rolling(window=10).mean()
 print(validation_moving)
@@ -63,29 +72,13 @@ validation_moving["index"] = validation['index']
 
 x = validation["index"]
 fig, ax = plt.subplots()
-# ax.plot(x, validation["RGB"], label="RGB")
-# ax.plot(x, validation["D3"], label="D3")
-# ax.plot(x, validation["RGBD"], label="RGBD")
-# ax.plot(x, validation["RGBD-F"], label="RGBD-F")
-
 
 ax.plot(validation_moving["index"], validation_moving["512 x 512"], "-", label="512 x 512")
 ax.plot(validation_moving["index"], validation_moving["256 x 256"], "-", label="256 x 256")
 
 
-#ax.plot(validation_avg["index"], validation_avg["RGB"], "-", label="avg RGB")
-#ax.plot(validation_avg["index"], validation_avg["D3"], "-", label="avg D3")
-#ax.plot(validation_avg["index"], validation_avg["RGBD"], "-", label="avg RGBD")
-#ax.plot(validation_avg["index"], validation_avg["RGBD-F"], "-", label="avg RGBD-F")
-
-# ax.plot(validation["index"], rgb_trend(validation["index"]), "--", label="trend RGB")
-# ax.plot(validation["index"], d3_trend(validation["index"]), "--", label="trend D3")
-# ax.plot(validation["index"], rgbd_trend(validation["index"]), "--", label="trend RGBD")
-# ax.plot(validation["index"], rgbdf_trend(validation["index"]), "--", label="trend RGBD-F")
-
 ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.05),
           ncol=3, fancybox=True, shadow=False)
 ax.set_xlabel("epochs")
 ax.set_ylabel("validation loss")
-# ax.set_yscale("log")
 plt.show()

@@ -14,7 +14,6 @@ import sys
 
 import imgaug as ia
 import imgaug.augmenters as iaa
-import keras
 import numpy as np
 
 from samples.sun.sund3 import SunD3Config, SunD3Dataset
@@ -46,19 +45,8 @@ def train_model(config, dataset_train, dataset_val, epochs, model_dir, augment, 
                               model_dir=model_dir)
     print(model.keras_model.summary())
     if load_model:
-        # loaded_model = keras.models.load_model(model_name, compile=False)
-        # model.keras_model = loaded_model
         model.load_weights(model_name, by_name=True)  # ,
-        # exclude=["mrcnn_class_logits", "mrcnn_bbox_fc",
-        #         "mrcnn_bbox", "mrcnn_mask"])
         model.epoch = init_epoch
-
-    if augment:
-        augmentation = iaa.Sequential([
-            iaa.Fliplr(0.5)
-        ])
-    else:
-        augmentation = iaa.Sequential()
 
     augmentation = iaa.Sequential([
         iaa.Fliplr(0.5),  # horizontally flip 50% of the images
@@ -171,8 +159,8 @@ def calc_mean_average_precision(dataset_val, inference_config, model):
         image, image_meta, gt_class_id, gt_bbox, gt_mask = \
             modellib.load_image_gt(dataset_val, inference_config,
                                    image_id, use_mini_mask=False)
-        molded_images = np.expand_dims(modellib.mold_image(image, inference_config), 0)
-        # Run object detection
+
+       # Run object detection
         results = model.detect([image], verbose=0)
         r = results[0]
         # Compute AP
@@ -301,9 +289,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\\public\\master_thesis_reithmeier_lukas\\sunrgbd\\SUN_RGBD\\crop"))
+                            "../datasets/SUN_RGBD/crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
-                        default="C:\\public\\master_thesis_reithmeier_lukas\\Mask_RCNN\\logs\\")
+                        default="../datasets/logs")
     parser.add_argument("-s", "--strategy", type=str, help="[D3, RGB, RGBD, RGBDParallel, RGBDFusenet]",
                         default="RGBDFusenet")
     parser.add_argument("-w", "--data_set", type=str, help="[SUN, ELEVATOR]", default="SUN")
@@ -311,6 +299,6 @@ if __name__ == "__main__":
 
     main(data_set=args.data_set, strategy=args.strategy, data_dir=args.data_dir, model_dir=args.model_dir, augment=True,
          load_model=False,
-         model_name="C:\\public\\master_thesis_reithmeier_lukas\\Mask_RCNN\\logs\\sunrgb20200706T1041\\mask_rcnn_sunrgb_0282.h5",
+         model_name="./mask_rcnn_sunrgb_0282.h5",
          init_epoch=282, train_layers="all",
          backbone="fusenet", batch_size=2)

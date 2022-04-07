@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot the optimizer runs
+#
+# author:   Lukas Reithmeier
+# date:     29.09.2020
+#
+# **********************************************************************************************************************
+
+
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 import matplotlib as mpl

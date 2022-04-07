@@ -1,3 +1,13 @@
+# **********************************************************************************************************************
+#
+# brief:    script to perform hyper parameter optimization
+#
+# author:   Lukas Reithmeier
+# date:     01.08.2020
+#
+# **********************************************************************************************************************
+
+
 import argparse
 import os
 import sys
@@ -243,7 +253,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))  # os.path.abspath("I:\Data\elevator\preprocessed"))
+                            "../datasets/sunrgbd/SUN_RGBD/crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/hparam_tuning_sunrgbd/")
     parser.add_argument("-e", "--epochs", type=int, help="number of epochs to train with each configuration",
@@ -253,4 +263,3 @@ if __name__ == "__main__":
     tpe_search = TPESearch(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)
     tpe_search.run()
 
-    # grid_search(data_dir=args.data_dir, log_dir=args.model_dir, epochs=args.epochs)

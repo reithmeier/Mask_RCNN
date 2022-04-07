@@ -1,37 +1,30 @@
+# **********************************************************************************************************************
+#
+# brief:    simple script to plot runtimes
+#
+# author:   Lukas Reithmeier
+# date:     15.08.2020
+#
+# **********************************************************************************************************************
+
+
 import os
 import sys
-import itertools
-import math
-import logging
-import json
-import re
 import random
-from collections import OrderedDict
-import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-import matplotlib.lines as lines
-from matplotlib.patches import Polygon
-import skimage.io
 
 # Root directory of the project
-ROOT_DIR = os.path.abspath("./../")
+ROOT_DIR = os.path.abspath("../../")
 print(ROOT_DIR)
 # Import Mask RCNN
 sys.path.append(ROOT_DIR)  # To find local version of the library
-from mrcnn.config import Config
 from mrcnn import utils
 from mrcnn import visualize
-from mrcnn.visualize import display_images
 import mrcnn.model as modellib
-from mrcnn.model import log
 
 from samples.elevator import elevator_d3, elevator_rgb, elevator_rgbd, elevator_rgbd_fusenet
 
-ELEVATOR_DIR = os.path.join(ROOT_DIR, "datasets", "elevator", "preprocessed")
+ELEVATOR_DIR = os.path.join(ROOT_DIR, "datasets", "../elevator", "preprocessed")
 MODEL_DIR = os.path.join(ROOT_DIR, "logs/")
-print(MODEL_DIR)
 
 model_file_rgb = os.path.join(MODEL_DIR, "weights/mask_rcnn_elevator_rgb_0050.h5")
 model_file_d3 = os.path.join(MODEL_DIR, "weights/mask_rcnn_elevator_d3_0050.h5")
@@ -126,14 +119,6 @@ def plot_sun_rgb():
         result_d3.savefig("inference_" + str(image_id) + "_elevator_d3.png")
         result_rgbd.savefig("inference_" + str(image_id) + "_elevator_rgbd.png")
         result_rgbd_fusenet.savefig("inference_" + str(image_id) + "_elevator_rgbd_fusenet.png")
-
-        """
-        skimage.io.imsave("inference_" + str(image_id) + "_ground_truth.png", ground_truth.astype(np.uint8))
-        skimage.io.imsave("inference_" + str(image_id) + "_sun_rgb.png", result_rgb.astype(np.uint8))
-        skimage.io.imsave("inference_" + str(image_id) + "_sun_d3.png", result_d3.astype(np.uint8))
-        skimage.io.imsave("inference_" + str(image_id) + "_sun_rgbd.png", result_rgbd.astype(np.uint8))
-        skimage.io.imsave("inference_" + str(image_id) + "_sun_rgbd_fusenet.png", result_rgbd_fusenet.astype(np.uint8))
-        """
 
 
 plot_sun_rgb()

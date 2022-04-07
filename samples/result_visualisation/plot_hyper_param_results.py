@@ -18,7 +18,7 @@ from hyperopt.plotting import main_plot_history, main_plot_histogram, main_plot_
 import pandas as pd
 import seaborn as sns
 
-ROOT_DIR = os.path.abspath("../")
+ROOT_DIR = os.path.abspath("../../")
 plt.style.use('ggplot')
 
 SMALL_SIZE = 20
@@ -175,8 +175,6 @@ def plot_hyperopt(trials_file, time_file, res_file):
     plot_correlation(correlation)
 
 
-# plot_hyperopt(ROOT_DIR + '/logs/hyperopt_sund3/hyperopt_trials_9.pkl')
-
-plot_hyperopt(ROOT_DIR +'/logs/hparam_tuning_sunrgbd\\hyperopt_trials_9.pkl',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd.txt',
-              'C:\\Users\\lukas\\Dropbox\\studium\\Masterarbeit\\src\\hyperopt_time_rgbd_res.csv')
+plot_hyperopt(ROOT_DIR + '/logs/hparam_tuning_sunrgbd/hyperopt_trials_9.pkl',
+              ROOT_DIR + '/logs/hyperopt_time_rgbd.txt',
+              ROOT_DIR + '/logs/hyperopt_time_rgbd_res.csv')

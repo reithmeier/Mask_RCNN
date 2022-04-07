@@ -37,17 +37,8 @@ def main():
             labels = np.load(os.path.join(args.input, filename))
             num_labels += labels.shape[2]
             label_sum = labels.sum(axis=2)
-            # print(label_sum.shape)
             all_labels += label_sum
-    """
-    for filename in os.listdir(args.input2):
-        if filename.endswith(".mask.npy"):
-            labels = np.load(os.path.join(args.input, filename))
-            num_labels += labels.shape[2]
-            label_sum = labels.sum(axis=2)
-            # print(label_sum.shape)
-            all_labels += label_sum
-    """
+
     fig = skimage.io.imshow(all_labels)
     fig.axes.get_xaxis().set_visible(False)
     fig.axes.get_yaxis().set_visible(False)
@@ -57,10 +48,6 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", type=str, help="Path of the input directory",
-                        #default="D:\\Data\\sun_rgbd\\crop\\label13\\train\\")
                         default=ROOT_DIR + "/datasets/elevator/preprocessed/labels/")
-    #parser.add_argument("-j", "--input2", type=str, help="Path of the input directory",
-                        #default="D:\\Data\\sun_rgbd\\crop\\label13\\test\\")
-                         #default=ROOT_DIR + "/datasets/elevator/preprocessed/labels/")
     args = parser.parse_args()
     main()

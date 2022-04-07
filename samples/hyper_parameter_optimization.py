@@ -275,7 +275,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-d", "--data_dir", type=str, help="Data directory",
                         default=os.path.abspath(
-                            "C:\public\master_thesis_reithmeier_lukas\sunrgbd\SUN_RGBD\crop"))
+                            "../datasets/sunrgbd/SUN_RGBD/crop"))
     parser.add_argument("-m", "--model_dir", type=str, help="Directory to store weights and results",
                         default=ROOT_DIR + "/logs/hparam_tuning/")
     parser.add_argument("-e", "--epochs", type=int, help="number of epochs to train with each configuration",
